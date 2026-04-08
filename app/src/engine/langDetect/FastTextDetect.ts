@@ -34,7 +34,7 @@ export async function detectLanguage(text: string): Promise<DetectionResult> {
   const script = detectScript(text.trim());
 
   if (script === 'Latn') {
-    // Could be English, Mizo, Khasi, Garo, or Romanised Indic
+    // Could be English, Mizo, Khasi, or Romanised Indic
     // For Latin, default to English unless we have more signals
     return { langCode: 'eng_Latn', confidence: 0.85, method: 'heuristic' };
   }

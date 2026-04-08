@@ -23,7 +23,7 @@ const SLIDES = [
   {
     icon: '🌍',
     title: 'Welcome to Bhasha',
-    subtitle: 'Real-time translation across all 22 Indian languages, plus Mizo, Khasi, and Garo. Fully offline after first setup.',
+    subtitle: 'Real-time translation across all 22 Indian languages, plus Mizo and Khasi. Fully offline after first setup.',
   },
   {
     icon: '🔒',

@@ -35,12 +35,17 @@ describe('Northeast language list', () => {
     expect(actual).toEqual(expected.sort());
   });
 
-  it('lists Mizo, Khasi, and Garo as Tier-2 (planned)', () => {
+  it('lists Mizo and Khasi as Tier-2 (planned via LoRA)', () => {
     const tier2Codes = PLANNED_LANGUAGES.map((l) => l.code).sort();
-    expect(tier2Codes).toEqual(['grt_Latn', 'kha_Latn', 'lus_Latn']);
+    expect(tier2Codes).toEqual(['kha_Latn', 'lus_Latn']);
     for (const lang of PLANNED_LANGUAGES) {
       expect(lang.hasBaseModel).toBe(false);
     }
+  });
+
+  it('does not list Garo (dropped from v1 — no usable parallel corpus)', () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    expect(codes).not.toContain('grt_Latn');
   });
 
   it('does not include any non-NE Indic languages (e.g. Tamil, Telugu, Hindi)', () => {
@@ -110,7 +115,6 @@ describe('isPairSupported', () => {
   it('rejects pairs that involve a tier-2 language', () => {
     expect(isPairSupported('eng_Latn', 'lus_Latn')).toBe(false);
     expect(isPairSupported('kha_Latn', 'eng_Latn')).toBe(false);
-    expect(isPairSupported('grt_Latn', 'asm_Beng')).toBe(false);
   });
 
   it('rejects unknown language codes', () => {

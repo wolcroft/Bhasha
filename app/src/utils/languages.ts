@@ -137,15 +137,10 @@ export const LANGUAGES: Language[] = [
     neStates: ['Meghalaya'],
     hasBaseModel: false,
   },
-  {
-    code: 'grt_Latn',
-    name: 'Garo',
-    nativeName: 'Aꞌchik',
-    script: 'Latn',
-    tier: 2,
-    neStates: ['Meghalaya'],
-    hasBaseModel: false,
-  },
+  // Garo (grt_Latn) was originally planned for Tier-2 but dropped from v1:
+  // AI4Bharat has no Garo data, the available bible/community corpora are
+  // too small for a usable LoRA, and shipping a stub would mislead users.
+  // Re-add when we have a real parallel corpus.
 ];
 
 /** Languages that have ONNX models bundled with the app and work today. */
