@@ -64,16 +64,16 @@ export const LANGUAGE_PACKS: LanguagePack[] = [
     description:
       'Translate from English into Nagamese (the lingua franca of Nagaland). LoRA fine-tuned on 7,500 parallel pairs. Bundled with the app.',
     languageCodes: ['eng_Latn'],
-    installedSizeBytes: 210 * 1024 * 1024,
+    installedSizeBytes: 215 * 1024 * 1024,
     version: '1.0.0',
   },
   {
     id: 'en-kha_Latn',
     name: 'English → Khasi',
     description:
-      'Translate from English into Khasi (principal language of Meghalaya). LoRA fine-tuned on 27,000 parallel pairs.',
+      'Translate from English into Khasi (principal language of Meghalaya). LoRA fine-tuned on 27,000 parallel pairs. Bundled with the app.',
     languageCodes: ['eng_Latn'],
-    installedSizeBytes: 210 * 1024 * 1024,
+    installedSizeBytes: 215 * 1024 * 1024,
     version: '1.0.0',
   },
 ];

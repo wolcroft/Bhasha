@@ -64,8 +64,10 @@ describe('Northeast language list', () => {
     const nagamese = PLANNED_LANGUAGES.find((l) => l.code === 'lus_Latn');
     expect(nagamese?.name).toBe('Nagamese');
     expect(nagamese?.neStates).toContain('Nagaland');
-    // Nagamese LoRA is trained — hasBaseModel true; Khasi pending training
+    // Both LoRA adapters are trained — hasBaseModel true for both
     expect(nagamese?.hasBaseModel).toBe(true);
+    const khasi = PLANNED_LANGUAGES.find((l) => l.code === 'kha_Latn');
+    expect(khasi?.hasBaseModel).toBe(true);
   });
 
   it('does not list Garo (dropped from v1 — no usable parallel corpus)', () => {
@@ -161,9 +163,16 @@ describe('isPairSupported', () => {
     expect(isPairSupported('lus_Latn', 'asm_Beng')).toBe(false);
   });
 
-  it('rejects pairs that involve Khasi (not yet trained)', () => {
+  it('accepts English → Khasi (LoRA trained forward direction)', () => {
+    expect(isPairSupported('eng_Latn', 'kha_Latn')).toBe(true);
+  });
+
+  it('rejects Khasi → English (no reverse indic-en LoRA trained)', () => {
     expect(isPairSupported('kha_Latn', 'eng_Latn')).toBe(false);
-    expect(isPairSupported('eng_Latn', 'kha_Latn')).toBe(false);
+  });
+
+  it('rejects Khasi → other Indic (no reverse LoRA)', () => {
+    expect(isPairSupported('kha_Latn', 'asm_Beng')).toBe(false);
   });
 
   it('rejects unknown language codes', () => {

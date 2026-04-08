@@ -153,7 +153,7 @@ export const LANGUAGES: Language[] = [
     script: 'Latn',
     tier: 2,
     neStates: ['Meghalaya'],
-    hasBaseModel: false,
+    hasBaseModel: true,
   },
   // Garo (grt_Latn) was originally planned for Tier-2 but dropped from v1:
   // AI4Bharat has no Garo data, the available bible/community corpora are
