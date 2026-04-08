@@ -16,12 +16,24 @@ Output:
 """
 
 import argparse
+import gc
+import os
 import sys
 from pathlib import Path
+
+# ─── Memory hygiene for 8 GB Mac ────────────────────────────────────────────
+# Limit thread workers and disable MKL parallel scratch space *before*
+# importing torch — once torch boots, these env vars are fixed for the run.
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+os.environ.setdefault("MKL_NUM_THREADS", "2")
+os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 
 import torch
 import torch.nn as nn
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+torch.set_num_threads(2)
+torch.set_grad_enabled(False)  # No autograd buffers needed for export
 
 MODELS_DIR = Path(__file__).parent / "models"
 ONNX_DIR = Path(__file__).parent / "onnx"
@@ -174,15 +186,26 @@ def main():
     print(f"    Loading model from {model_path} ...")
 
     tokenizer = AutoTokenizer.from_pretrained(str(model_path), trust_remote_code=True)
+    # `low_cpu_mem_usage=True` streams weights from disk to the model rather
+    # than holding two copies in RAM during init — critical on 8 GB Macs.
     model = AutoModelForSeq2SeqLM.from_pretrained(
-        str(model_path), trust_remote_code=True
+        str(model_path),
+        trust_remote_code=True,
+        low_cpu_mem_usage=True,
+        torch_dtype=torch.float32,
     ).eval().to(device)
 
     print(f"    Model loaded. Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M")
 
     with torch.no_grad():
         export_encoder(model, tokenizer, out_dir, device)
+        # Free encoder-export buffers before tracing the decoder
+        gc.collect()
         export_decoder(model, tokenizer, out_dir, device)
+
+    # Drop the FP32 model + autograd graphs from RAM before returning
+    del model
+    gc.collect()
 
     print(f"\n✅  Export complete → {out_dir}")
 

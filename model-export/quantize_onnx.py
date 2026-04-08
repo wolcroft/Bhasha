@@ -14,6 +14,8 @@ Usage:
 import argparse
 from pathlib import Path
 
+import gc
+
 from onnxruntime.quantization import quantize_dynamic, QuantType
 from onnxruntime.quantization.shape_inference import quant_pre_process
 
@@ -35,13 +37,15 @@ def quantize_model(model_name: str) -> None:
             print(f"  [SKIP] {src_path} not found — run export_onnx.py first")
             continue
 
+        stem = Path(filename).stem  # "encoder_model" / "decoder_model"
+
         # Shape inference pre-process (improves quantization quality)
-        preprocessed = dst_dir / f"{filename.stem}_preprocessed.onnx"
+        preprocessed = dst_dir / f"{stem}_preprocessed.onnx"
         print(f"  [prep] shape inference on {filename} ...")
         quant_pre_process(str(src_path), str(preprocessed), skip_symbolic_shape=True)
 
         # Dynamic INT8 quantization (weights + activations where possible)
-        dst_path = dst_dir / f"{filename.stem}_int8.onnx"
+        dst_path = dst_dir / f"{stem}_int8.onnx"
         print(f"  [quant] quantizing to INT8 → {dst_path.name} ...")
         quantize_dynamic(
             str(preprocessed),
@@ -55,8 +59,9 @@ def quantize_model(model_name: str) -> None:
         ratio = src_mb / dst_mb if dst_mb > 0 else 0
         print(f"  [done] {src_mb:.1f} MB → {dst_mb:.1f} MB  ({ratio:.1f}x smaller)")
 
-        # Clean up preprocessed temp file
+        # Clean up preprocessed temp file + free RAM before next file
         preprocessed.unlink(missing_ok=True)
+        gc.collect()
 
 
 def main():
