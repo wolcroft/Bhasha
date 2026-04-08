@@ -13,7 +13,6 @@ this script:
 Usage:
     python merge_lora.py --lang lus_Latn
     python merge_lora.py --lang kha_Latn
-    python merge_lora.py --lang grt_Latn
 """
 
 import argparse
@@ -82,7 +81,7 @@ def merge(lang: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lang", required=True, choices=["lus_Latn", "kha_Latn", "grt_Latn"])
+    parser.add_argument("--lang", required=True, choices=["lus_Latn", "kha_Latn"])
     args = parser.parse_args()
     merge(args.lang)
 

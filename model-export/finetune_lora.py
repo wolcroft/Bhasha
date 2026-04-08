@@ -2,9 +2,10 @@
 Bhasha — LoRA fine-tuning for Tier-2 Northeast languages
 =========================================================
 IndicTrans2's distilled-200M base model does not natively support
-Mizo (lus_Latn), Khasi (kha_Latn), or Garo (grt_Latn). This script
-fine-tunes a small LoRA adapter on top of the en-indic checkpoint
-using parallel English↔target sentence pairs.
+Mizo (lus_Latn) or Khasi (kha_Latn). This script fine-tunes a small
+LoRA adapter on top of the en-indic checkpoint using parallel
+English↔target sentence pairs. (Garo was dropped from v1 — no usable
+parallel corpus exists.)
 
 Why LoRA?
   • Trainable params drop from 200M to ~2-5M (rank 16, attention only)
@@ -30,7 +31,6 @@ OOM-safe defaults for 8 GB Mac:
 Usage:
     python finetune_lora.py --lang lus_Latn --epochs 3
     python finetune_lora.py --lang kha_Latn --epochs 3
-    python finetune_lora.py --lang grt_Latn --epochs 3
 
 After training, the LoRA adapter is exported under
     ./lora-adapters/<lang>/   (~15 MB each)
@@ -63,7 +63,6 @@ ADAPTER_DIR = ROOT / "lora-adapters"
 TIER2_LANGS = {
     "lus_Latn": "Mizo",
     "kha_Latn": "Khasi",
-    "grt_Latn": "Garo",
 }
 
 
@@ -88,13 +87,14 @@ class ParallelJsonlDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict:
         ex = self.examples[idx]
-        # IndicTrans2 expects [src_lang_id] + tokens + [eos]
-        # The HF tokenizer for IndicTrans2 handles tag injection when given
-        # `src_lang` / `tgt_lang` kwargs.
-        self.tokenizer.src_lang = self.src_lang
-        self.tokenizer.tgt_lang = self.tgt_lang
+        # IndicTrans2's custom tokenizer does NOT honor `src_lang`/`tgt_lang`
+        # kwargs or instance attrs (we hit this exact bug during ONNX export).
+        # The lang tags must be PREPENDED to the source string as
+        # "<src_lang> <tgt_lang> <text>" — see tokenization_indictrans.py
+        # _src_tokenize. The target side is plain text in target mode.
+        src_with_tags = f"{self.src_lang} {self.tgt_lang} {ex['src']}"
         encoded = self.tokenizer(
-            ex["src"],
+            src_with_tags,
             text_target=ex["tgt"],
             max_length=self.max_len,
             truncation=True,

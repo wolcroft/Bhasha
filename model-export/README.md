@@ -118,3 +118,68 @@ the `EncoderWrapper`/`DecoderWrapper` attribute paths accordingly.
 
 **OOM during export** — 200M model needs ~4-6GB RAM. Close other apps or try
 `--device cpu` with swap space available.
+
+## Tier-2 LoRA pipeline (Mizo + Khasi)
+
+Mizo (`lus_Latn`) and Khasi (`kha_Latn`) are not supported by the IndicTrans2
+distilled base model out of the box, but their language-tag embeddings *do*
+exist in the en-indic vocab (ids 32162 and 32163). LoRA fine-tuning on a
+small parallel corpus is enough to make them usable. Garo (`grt_Latn`) is
+not in the dict at all and was dropped from v1.
+
+### Step A — Get parallel data
+
+Realistic sources (do your own license check before bundling derivatives):
+
+| Language | Source | Approx size |
+|---|---|---|
+| Mizo | `christos-c/bible-corpus` on HuggingFace | ~30k verses |
+| Mizo | OPUS Tatoeba | small but high quality |
+| Mizo | FLORES-200 dev/test | ~2k sentences (eval only) |
+| Khasi | `christos-c/bible-corpus` on HuggingFace | ~30k verses |
+| Khasi | Khasi Hills Bible Society | manual scrape, verse-aligned |
+
+Confirmed-empty (skip these — no Mizo/Khasi coverage):
+- AI4Bharat BPCC
+- WMT24 LR-Indic
+
+### Step B — Convert to JSONL
+
+`prepare_lora_data.py` accepts TSV, JSONL, or two parallel plain-text files
+and produces `data/<lang>/{train,dev}.jsonl`. It filters out misaligned
+pairs by length ratio and dedupes.
+
+```bash
+# Bible corpus from HuggingFace, downloaded to a TSV first:
+python prepare_lora_data.py --lang lus_Latn --tsv ./raw/mizo_bible.tsv
+
+# Or two paired plain-text files:
+python prepare_lora_data.py --lang kha_Latn \
+    --src-file ./raw/khasi/english.txt \
+    --tgt-file ./raw/khasi/khasi.txt
+```
+
+### Step C — Fine-tune
+
+```bash
+python finetune_lora.py --lang lus_Latn --epochs 3
+python finetune_lora.py --lang kha_Latn --epochs 3
+```
+
+LoRA defaults are tuned for an 8 GB Mac: rank 16 on q_proj/v_proj, batch=1
+with grad accum 16, fp32, gradient checkpointing. Adapter lands at
+`lora-adapters/<lang>/` (~15 MB).
+
+### Step D — Merge + re-export
+
+```bash
+python merge_lora.py --lang lus_Latn
+python export_onnx.py --model en-lus_Latn       # uses models-merged/en-lus_Latn
+python quantize_onnx.py --model en-lus_Latn
+python build_tokenizer_onnx.py --direction en-lus_Latn  # if needed
+python copy_to_app.py en-lus_Latn
+```
+
+The merged model uses the same dict.SRC.json/dict.TGT.json as the en-indic
+base, so the existing `tokenizer.onnx` for `en-indic` works as-is — no need
+to rebuild the tokenizer graph.
