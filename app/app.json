@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Bhasha",
+    "slug": "bhasha",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "bhasha",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F1729"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bhasha.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Bhasha uses the microphone for voice translation.",
+        "NSCameraUsageDescription": "Bhasha uses the camera to translate text in photos.",
+        "NSPhotoLibraryUsageDescription": "Bhasha reads photos to translate text in images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F1729"
+      },
+      "package": "com.bhasha.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Bhasha uses the microphone for voice translation."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

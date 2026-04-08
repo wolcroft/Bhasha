@@ -1,0 +1,63 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "jest"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ]
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.0.2",
+    "@shopify/react-native-skia": "^2.6.2",
+    "babel-plugin-module-resolver": "^5.0.3",
+    "expo": "~54.0.33",
+    "expo-asset": "^55.0.13",
+    "expo-av": "^16.0.8",
+    "expo-camera": "^55.0.14",
+    "expo-constants": "^55.0.12",
+    "expo-file-system": "^55.0.15",
+    "expo-image-picker": "^55.0.17",
+    "expo-linking": "^55.0.11",
+    "expo-router": "^55.0.11",
+    "expo-splash-screen": "^55.0.16",
+    "expo-status-bar": "~3.0.9",
+    "onnxruntime-react-native": "^1.24.3",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-executorch": "^0.8.1",
+    "react-native-fs": "^2.20.0",
+    "react-native-gesture-handler": "^2.31.0",
+    "react-native-progress": "^5.0.1",
+    "react-native-reanimated": "^4.3.0",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0",
+    "react-native-sherpa-onnx-offline-tts": "^0.2.6",
+    "react-native-svg": "^15.15.4",
+    "react-native-zip-archive": "^7.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.1.0",
+    "@types/react-native": "^0.72.8",
+    "babel-preset-expo": "^55.0.16",
+    "jest": "^30.3.0",
+    "jest-expo": "^55.0.14",
+    "ts-jest": "^29.4.9",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

@@ -1,0 +1,50 @@
+# Model export
+model-export/bhasha-models/
+model-export/models/
+model-export/onnx/
+model-export/onnx-quantized/
+model-export/venv/
+__pycache__/
+*.pyc
+
+# NOTE: app/assets/models/*.onnx files are committed as ~0-byte placeholder
+# stubs. After running model-export/copy_to_app.py they become ~280 MB each
+# (~1 GB total). DO NOT git add them after the pipeline runs without first
+# moving to Git LFS — they will exceed GitHub's 100 MB per-file limit.
+
+# React Native / Expo
+app/node_modules/
+app/.expo/
+app/dist/
+app/web-build/
+app/ios/
+app/android/
+app/*.jks
+app/*.p12
+app/*.key
+app/*.mobileprovision
+
+# Native build artifacts
+app/ios/Pods/
+app/ios/build/
+app/android/build/
+app/android/app/build/
+app/android/.gradle/
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+.env*
+
+# IDE
+.vscode/
+.idea/
+*.swp

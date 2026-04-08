@@ -1,0 +1,7 @@
+bhasha-models/
+models/
+onnx/
+onnx-quantized/
+__pycache__/
+*.pyc
+.DS_Store

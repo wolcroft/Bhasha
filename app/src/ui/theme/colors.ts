@@ -1,0 +1,38 @@
+export const Colors = {
+  light: {
+    primary: '#1A6FDB',
+    primaryMuted: '#E8F0FE',
+    accent: '#FF6B35',
+    background: '#F5F7FF',
+    surface: '#FFFFFF',
+    surfaceElevated: '#F0F4FF',
+    border: '#E2E8F0',
+    text: '#1A202C',
+    textSecondary: '#4A5568',
+    textMuted: '#A0AEC0',
+    success: '#38A169',
+    error: '#E53E3E',
+    warning: '#D69E2E',
+    waveform: '#1A6FDB',
+    overlay: 'rgba(26, 111, 219, 0.15)',
+  },
+  dark: {
+    primary: '#4D9FFF',
+    primaryMuted: '#1A2744',
+    accent: '#FF8C5A',
+    background: '#0F1729',
+    surface: '#1A2236',
+    surfaceElevated: '#243045',
+    border: '#2D3F5C',
+    text: '#F7FAFC',
+    textSecondary: '#A0AEC0',
+    textMuted: '#4A5568',
+    success: '#68D391',
+    error: '#FC8181',
+    warning: '#F6E05E',
+    waveform: '#4D9FFF',
+    overlay: 'rgba(77, 159, 255, 0.15)',
+  },
+} as const;
+
+export type ColorScheme = typeof Colors.light;
