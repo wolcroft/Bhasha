@@ -13,6 +13,23 @@ source bhasha-models/bin/activate
 
 ## Step 2 — Download models from HuggingFace
 
+> ⚠️ **Gated repos.** As of 2026, all `ai4bharat/indictrans2-*` checkpoints are
+> gated. You must (a) have a HuggingFace account, (b) request access on each
+> repo page, and (c) export your token before running the downloader:
+>
+> 1. Visit each repo and click **"Agree and access repository"**:
+>    - https://huggingface.co/ai4bharat/indictrans2-en-indic-dist-200M
+>    - https://huggingface.co/ai4bharat/indictrans2-indic-en-dist-200M
+>    - https://huggingface.co/ai4bharat/indictrans2-indic-indic-dist-320M
+> 2. Generate a read token at https://huggingface.co/settings/tokens
+> 3. Export it before running the downloader:
+>    ```bash
+>    export HF_TOKEN=hf_xxx...
+>    ```
+>
+> Approval is usually instant (auto-accept) but can take a few hours during
+> business days. Without it, the downloader fails with `GatedRepoError: 403`.
+
 Downloads ~1.5GB per model direction (3 directions total):
 
 ```bash
