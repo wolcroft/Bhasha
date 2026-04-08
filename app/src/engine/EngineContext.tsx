@@ -2,11 +2,15 @@
  * EngineContext — single source of truth for the on-device translation engine.
  *
  * Lifecycle:
- *   1. EngineProvider mounts at the root layout
+ *   1. EngineProvider mounts at the root layout.
  *   2. On first render, it materialises bundled model packs (if not yet copied)
- *      and initialises the BPE tokenizer + IndicProcessor
- *   3. Screens use `useEngine()` to call `translate(text, src, tgt)` directly
- *   4. The translator caches OnnxTranslator sessions per model direction
+ *      to writable storage.
+ *   3. Screens use `useEngine()` to call `translate(text, src, tgt)` directly.
+ *   4. The translator caches OnnxTranslator sessions per model direction; the
+ *      sessions hold the encoder, decoder, tokenizer.onnx, and detokenizer.onnx
+ *      for that direction. Switching src/tgt within the same direction reloads
+ *      only because the language tag pair is part of OnnxTokenizer's state —
+ *      a future optimisation would parameterise that at run() time.
  *
  * Engine state is exposed via `engine.status` so screens can show:
  *   - 'initializing' — first-launch asset copy in progress
@@ -19,16 +23,14 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from 'react';
-import { BPETokenizer, loadTokenizer } from './translation/tokenizer';
-import { IndicProcessor } from './translation/IndicProcessor';
 import {
   OnnxTranslator,
   getTranslator,
   type ModelDirection,
+  type ModelPaths,
 } from './translation/OnnxTranslator';
 import {
   initModelManager,
@@ -38,9 +40,13 @@ import {
 } from '@/models/ModelManager';
 import {
   LANGUAGE_PACKS,
-  getPackDirectory,
+  getEncoderPath,
+  getDecoderPath,
+  getTokenizerPath,
+  getDetokenizerPath,
   type PackDirection,
 } from '@/models/LanguagePack';
+import { BUNDLED_MODELS } from '@/models/bundledAssets';
 import { getModelDirection, isPairSupported } from '@/utils/languages';
 
 export type EngineStatus = 'initializing' | 'ready' | 'error' | 'unsupported';
@@ -73,32 +79,33 @@ export function useEngine(): EngineState {
 
 interface ProviderProps { children: ReactNode; }
 
+function pathsForDirection(direction: ModelDirection): ModelPaths {
+  return {
+    encoder:     getEncoderPath(direction),
+    decoder:     getDecoderPath(direction),
+    tokenizer:   getTokenizerPath(direction),
+    detokenizer: getDetokenizerPath(direction),
+    // tokensMeta is bundled as a JS module — no file IO required.
+    tokensMeta:  BUNDLED_MODELS[direction].tokensMeta,
+  };
+}
+
 export function EngineProvider({ children }: ProviderProps) {
   const [status, setStatus] = useState<EngineStatus>('initializing');
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [packStates, setPackStates] = useState<Record<PackDirection, PackState>>({
-    'en-indic': { id: 'en-indic', status: 'idle', progressFraction: 0 },
-    'indic-en': { id: 'indic-en', status: 'idle', progressFraction: 0 },
+    'en-indic':    { id: 'en-indic',    status: 'idle', progressFraction: 0 },
+    'indic-en':    { id: 'indic-en',    status: 'idle', progressFraction: 0 },
     'indic-indic': { id: 'indic-indic', status: 'idle', progressFraction: 0 },
   });
-
-  // Per-direction tokenizer + processor cache
-  const tokenizers = useMemo(() => new Map<ModelDirection, BPETokenizer>(), []);
-  const processors = useMemo(() => new Map<ModelDirection, IndicProcessor>(), []);
 
   const initEngine = useCallback(async () => {
     setStatus('initializing');
     setErrorMessage(undefined);
-
     try {
-      // 1. Read on-disk pack state
       await initModelManager();
-
-      // 2. Materialise bundled packs into writable storage if not already
       await installAllBundledPacks();
-
-      // 3. Engine is ready — actual tokenizer/translator load happens lazily
-      //    on the first translate() call to keep first paint fast.
+      // Sessions load lazily on the first translate() call to keep first paint fast.
       setStatus('ready');
     } catch (err: any) {
       console.error('[Engine] init failed:', err);
@@ -107,7 +114,6 @@ export function EngineProvider({ children }: ProviderProps) {
     }
   }, []);
 
-  // Subscribe to all pack state updates
   useEffect(() => {
     const unsubs = LANGUAGE_PACKS.map((pack) =>
       subscribeToPackState(pack.id, (state) => {
@@ -117,38 +123,19 @@ export function EngineProvider({ children }: ProviderProps) {
     return () => unsubs.forEach((u) => u());
   }, []);
 
-  // Initial engine bring-up
   useEffect(() => {
     initEngine();
   }, [initEngine]);
 
-  // ─── Lazy loaders ──────────────────────────────────────────────────────────
+  // ─── Lazy loader ───────────────────────────────────────────────────────────
 
   const ensureLoaded = useCallback(
     async (direction: ModelDirection, srcLang: string, tgtLang: string): Promise<OnnxTranslator> => {
-      let tokenizer = tokenizers.get(direction);
-      let processor = processors.get(direction);
-
-      if (!tokenizer || !processor) {
-        const modelDir = getPackDirectory(direction);
-        tokenizer = await loadTokenizer(modelDir, srcLang, tgtLang);
-        processor = new IndicProcessor(tokenizer);
-        tokenizers.set(direction, tokenizer);
-        processors.set(direction, processor);
-      } else {
-        // Update language tags on existing tokenizer
-        // (the BPE merges + vocab are shared across directions)
-        (tokenizer as any).srcLang = srcLang;
-        (tokenizer as any).tgtLang = tgtLang;
-      }
-
-      const translator = getTranslator(direction, processor, tokenizer);
-      if (!translator.isLoaded) {
-        await translator.load(getPackDirectory(direction), direction);
-      }
+      const translator = getTranslator(direction);
+      await translator.load(pathsForDirection(direction), direction, srcLang, tgtLang);
       return translator;
     },
-    [tokenizers, processors],
+    [],
   );
 
   // ─── translate() ───────────────────────────────────────────────────────────
@@ -159,10 +146,7 @@ export function EngineProvider({ children }: ProviderProps) {
         throw new Error(`Engine not ready (status: ${status})`);
       }
       if (!isPairSupported(srcLang, tgtLang)) {
-        return {
-          translation: '[Language pair not supported in v1.0]',
-          latencyMs: 0,
-        };
+        return { translation: '[Language pair not supported in v1.0]', latencyMs: 0 };
       }
       if (srcLang === tgtLang) {
         return { translation: text, latencyMs: 0 };
@@ -170,12 +154,10 @@ export function EngineProvider({ children }: ProviderProps) {
 
       const direction = getModelDirection(srcLang, tgtLang);
       const translator = await ensureLoaded(direction, srcLang, tgtLang);
-      return translator.translate(text, srcLang, tgtLang, { beamSize: 5 });
+      return translator.translate(text, { beamSize: 5 });
     },
     [status, ensureLoaded],
   );
-
-  // ─── value ────────────────────────────────────────────────────────────────
 
   const value: EngineState = {
     status,

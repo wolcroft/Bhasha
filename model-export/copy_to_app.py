@@ -4,16 +4,19 @@ Bhasha — Copy quantized models into the React Native app's bundled-asset slot.
 Reads from:
     onnx-quantized/<direction>/encoder_model_int8.onnx
     onnx-quantized/<direction>/decoder_model_int8.onnx
-    models/<direction>/  (for vocab.json + merges.txt)
+    onnx-quantized/<direction>/tokenizer.onnx     (built by build_tokenizer_onnx.py)
+    onnx-quantized/<direction>/detokenizer.onnx   (built by build_tokenizer_onnx.py)
 
 Writes to:
-    ../app/assets/models/<direction>/encoder_model_int8.onnx
-    ../app/assets/models/<direction>/decoder_model_int8.onnx
-    ../app/assets/models/<direction>/vocab.txt   (renamed from vocab.json — Metro
-                                                  treats .json as a JS source)
-    ../app/assets/models/<direction>/merges.txt
+    ../app/assets/models/<direction>/{encoder,decoder}_model_int8.onnx
+    ../app/assets/models/<direction>/{tokenizer,detokenizer}.onnx
 
-After running this, do:
+The tokenizer/detokenizer ONNX graphs use onnxruntime-extensions custom ops
+(SentencepieceTokenizer / SentencepieceDecoder), which means the React Native
+app must have `onnxruntimeExtensionsEnabled: "true"` in its package.json so
+the matching native library is linked.
+
+After running this:
     cd ../app
     npx expo prebuild   # Re-link assets into native projects
 """
@@ -24,56 +27,40 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 QUANTIZED_DIR = ROOT / "onnx-quantized"
-MODELS_DIR = ROOT / "models"
 APP_ASSETS = ROOT.parent / "app" / "assets" / "models"
 
 DIRECTIONS = ["en-indic", "indic-en", "indic-indic"]
+ASSET_FILES = (
+    "encoder_model_int8.onnx",
+    "decoder_model_int8.onnx",
+    "tokenizer.onnx",
+    "detokenizer.onnx",
+    "tokens.json",
+)
 
 
 def copy_one(direction: str) -> bool:
-    src_quant = QUANTIZED_DIR / direction
-    src_tok = MODELS_DIR / direction
-    dst = APP_ASSETS / direction
-    dst.mkdir(parents=True, exist_ok=True)
+    src_dir = QUANTIZED_DIR / direction
+    dst_dir = APP_ASSETS / direction
+    dst_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n==> {direction}")
 
-    # ONNX files
-    for fname in ("encoder_model_int8.onnx", "decoder_model_int8.onnx"):
-        src = src_quant / fname
+    for fname in ASSET_FILES:
+        src = src_dir / fname
         if not src.exists():
-            print(f"  [SKIP] {src} not found — run quantize_onnx.py first")
+            print(f"  [MISS] {src} — run the relevant build step first")
             return False
-        shutil.copy2(src, dst / fname)
-        print(f"  copied {fname}  ({src.stat().st_size / 1e6:.1f} MB)")
+        shutil.copy2(src, dst_dir / fname)
+        print(f"  copied {fname}  ({src.stat().st_size / 1e6:.2f} MB)")
 
-    # Tokenizer files: vocab.json → vocab.txt (Metro asset workaround)
-    vocab_src = src_tok / "vocab.json"
-    if not vocab_src.exists():
-        # Some HF tokenizers store the vocab inside tokenizer.json or
-        # spm.model — we accept either as a fallback.
-        for alt in ("tokenizer.json", "spm.model"):
-            alt_path = src_tok / alt
-            if alt_path.exists():
-                vocab_src = alt_path
-                break
-
-    if vocab_src.exists():
-        shutil.copy2(vocab_src, dst / "vocab.txt")
-        print(f"  copied vocab → vocab.txt")
-    else:
-        print(f"  [SKIP] no vocab file found in {src_tok}")
-        return False
-
-    merges_src = src_tok / "merges.txt"
-    if merges_src.exists():
-        shutil.copy2(merges_src, dst / "merges.txt")
-        print(f"  copied merges.txt")
-    else:
-        # SentencePiece-only tokenizers may not have merges.txt
-        # — write an empty stub so the BPE loader has a file to read
-        (dst / "merges.txt").write_text("#version: 0.2\n")
-        print(f"  [stub] no merges.txt — wrote empty stub")
+    # Encoder/decoder models can have an external-data sidecar (>2 GB protobuf
+    # workaround). Copy it alongside if present.
+    for fname in ("encoder_model_int8.onnx", "decoder_model_int8.onnx"):
+        sidecar = src_dir / f"{fname}.data"
+        if sidecar.exists():
+            shutil.copy2(sidecar, dst_dir / sidecar.name)
+            print(f"  copied {sidecar.name}  ({sidecar.stat().st_size / 1e6:.2f} MB)")
 
     return True
 
@@ -81,24 +68,22 @@ def copy_one(direction: str) -> bool:
 def main() -> None:
     if not QUANTIZED_DIR.exists():
         print("ERROR: onnx-quantized/ not found.")
-        print("       Run: python export_onnx.py + python quantize_onnx.py first.")
+        print("       Run export_onnx.py + quantize_onnx.py + build_tokenizer_onnx.py first.")
         sys.exit(1)
 
     targets = sys.argv[1:] if len(sys.argv) > 1 else DIRECTIONS
-    success = []
-    failure = []
+    success, failure = [], []
 
     for direction in targets:
         if direction not in DIRECTIONS:
             print(f"Unknown direction: {direction}")
             continue
-        ok = copy_one(direction)
-        (success if ok else failure).append(direction)
+        (success if copy_one(direction) else failure).append(direction)
 
-    print(f"\n✅  Copied: {success}")
+    print(f"\nCopied: {success}")
     if failure:
-        print(f"⚠️  Failed: {failure}")
-    print(f"\nNext: cd ../app && npx expo prebuild")
+        print(f"Failed: {failure}")
+    print("\nNext: cd ../app && npx expo prebuild")
 
 
 if __name__ == "__main__":

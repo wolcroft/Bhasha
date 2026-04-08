@@ -37,11 +37,16 @@ echo "════════════════════════�
 echo " STAGE 1: Download IndicTrans2 weights"
 echo "════════════════════════════════════════════════════"
 for dir in "${DIRECTIONS[@]}"; do
-  if [[ ! -d "models/$dir" ]]; then
-    echo "  → downloading $dir"
-    python download_models.py "$dir"
-  else
+  # A bare directory existence check is not enough — a previous failed run
+  # may have left only the public LICENSE/README behind. Look for an actual
+  # weights file (config.json + model.safetensors or pytorch_model.bin).
+  if [[ -f "models/$dir/config.json" ]] && \
+     { [[ -f "models/$dir/model.safetensors" ]] || [[ -f "models/$dir/pytorch_model.bin" ]]; }; then
     echo "  → $dir already cached"
+  else
+    echo "  → downloading $dir"
+    rm -rf "models/$dir"  # wipe any partial state from a prior failure
+    python download_models.py "$dir"
   fi
 done
 

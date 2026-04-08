@@ -7,10 +7,12 @@ model-export/venv/
 __pycache__/
 *.pyc
 
-# NOTE: app/assets/models/*.onnx files are committed as ~0-byte placeholder
-# stubs. After running model-export/copy_to_app.py they become ~280 MB each
-# (~1 GB total). DO NOT git add them after the pipeline runs without first
-# moving to Git LFS — they will exceed GitHub's 100 MB per-file limit.
+# Bundled model binaries are produced by the Python pipeline
+# (model-export/run_pipeline.sh). They are 70-200 MB each, exceed GitHub's
+# 100 MB per-file limit, and are not tracked. To populate them locally:
+#   cd model-export && ./run_pipeline.sh
+app/assets/models/**/*.onnx
+app/assets/models/**/*.onnx.data
 
 # React Native / Expo
 app/node_modules/

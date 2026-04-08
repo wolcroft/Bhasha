@@ -78,21 +78,21 @@ export function getDecoderPath(id: PackDirection): string {
   return `${getPackDirectory(id)}/decoder_model_int8.onnx`;
 }
 
-export function getVocabPath(id: PackDirection): string {
-  return `${getPackDirectory(id)}/vocab.txt`;
+export function getTokenizerPath(id: PackDirection): string {
+  return `${getPackDirectory(id)}/tokenizer.onnx`;
 }
 
-export function getMergesPath(id: PackDirection): string {
-  return `${getPackDirectory(id)}/merges.txt`;
+export function getDetokenizerPath(id: PackDirection): string {
+  return `${getPackDirectory(id)}/detokenizer.onnx`;
 }
 
 /** Check if a pack's model files have been copied to the writable directory. */
 export async function isPackInstalled(id: PackDirection): Promise<boolean> {
-  const [enc, dec, vocab, merges] = await Promise.all([
+  const [enc, dec, tok, detok] = await Promise.all([
     FileSystem.getInfoAsync(getEncoderPath(id)),
     FileSystem.getInfoAsync(getDecoderPath(id)),
-    FileSystem.getInfoAsync(getVocabPath(id)),
-    FileSystem.getInfoAsync(getMergesPath(id)),
+    FileSystem.getInfoAsync(getTokenizerPath(id)),
+    FileSystem.getInfoAsync(getDetokenizerPath(id)),
   ]);
-  return enc.exists && dec.exists && vocab.exists && merges.exists;
+  return enc.exists && dec.exists && tok.exists && detok.exists;
 }

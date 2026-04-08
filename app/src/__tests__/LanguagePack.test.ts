@@ -13,8 +13,8 @@ import {
   getPackDirectory,
   getEncoderPath,
   getDecoderPath,
-  getVocabPath,
-  getMergesPath,
+  getTokenizerPath,
+  getDetokenizerPath,
 } from '../models/LanguagePack';
 
 describe('LANGUAGE_PACKS', () => {
@@ -66,17 +66,17 @@ describe('path helpers', () => {
     expect(dir).toContain('models/en-indic');
   });
 
-  it('encoder, decoder, vocab, merges all live in the same pack dir', () => {
+  it('encoder, decoder, tokenizer, detokenizer all live in the same pack dir', () => {
     const dir = getPackDirectory('indic-en');
     expect(getEncoderPath('indic-en').startsWith(dir)).toBe(true);
     expect(getDecoderPath('indic-en').startsWith(dir)).toBe(true);
-    expect(getVocabPath('indic-en').startsWith(dir)).toBe(true);
-    expect(getMergesPath('indic-en').startsWith(dir)).toBe(true);
+    expect(getTokenizerPath('indic-en').startsWith(dir)).toBe(true);
+    expect(getDetokenizerPath('indic-en').startsWith(dir)).toBe(true);
   });
 
-  it('uses .txt for vocab (Metro asset workaround), not .json', () => {
-    expect(getVocabPath('en-indic').endsWith('vocab.txt')).toBe(true);
-    expect(getVocabPath('en-indic').endsWith('vocab.json')).toBe(false);
+  it('tokenizer/detokenizer are bundled as ONNX graphs (custom ops via ort-extensions)', () => {
+    expect(getTokenizerPath('en-indic').endsWith('tokenizer.onnx')).toBe(true);
+    expect(getDetokenizerPath('en-indic').endsWith('detokenizer.onnx')).toBe(true);
   });
 
   it('uses int8 quantized ONNX filenames', () => {

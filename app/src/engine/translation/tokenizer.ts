@@ -1,169 +1,132 @@
 /**
- * BPE Tokenizer for IndicTrans2
+ * OnnxTokenizer — wraps the SentencePiece+remap ONNX graphs built by
+ * model-export/build_tokenizer_onnx.py.
  *
- * IndicTrans2 uses SentencePiece (BPE) with a vocabulary of ~32K tokens,
- * shared across all 22 Indic languages + English. The vocabulary file
- * (vocab.json + merges.txt) is loaded from the downloaded model pack.
+ * Why this exists: IndicTrans2's tokenization is SentencePiece pieces plus a
+ * fairseq-style dict remap plus a per-direction language tag prefix and EOS
+ * suffix. There's no production-grade JS implementation of that pipeline, so
+ * we ship two tiny ONNX graphs (tokenizer.onnx + detokenizer.onnx) per
+ * direction and call them from JS through onnxruntime-react-native — exactly
+ * how the encoder/decoder are called. The native side already has SentencePiece
+ * available via onnxruntime-extensions; we just need
+ * `onnxruntimeExtensionsEnabled: "true"` in app/package.json so it's linked.
  *
- * This is a runtime JS tokenizer — it operates identically to the Python
- * HuggingFace tokenizer, enabling on-device preprocessing without Python.
+ * Public surface:
+ *   load(...)         construct from already-resolved file URIs + tokens.json
+ *   encode(text)      → input_ids/attention_mask tensors, ready for the encoder
+ *   decode(ids)       → string (specials/lang tags stripped before passing)
+ *   decoderStartId    forced first token for the decoder loop
+ *   eosId             stop condition for the decoder loop
  */
 
-import * as FileSystem from 'expo-file-system/legacy';
+import * as ort from 'onnxruntime-react-native';
+import type { InferenceSession, Tensor } from 'onnxruntime-react-native';
 
-export interface TokenizerConfig {
-  vocabPath: string;   // Path to vocab.json
-  mergesPath: string;  // Path to merges.txt
-  srcLang: string;     // e.g. "eng_Latn"
-  tgtLang: string;     // e.g. "hin_Deva"
+export interface TokenizerSpecials {
+  bos: number;
+  pad: number;
+  eos: number;
+  unk: number;
 }
 
-type Vocab = Record<string, number>;
-type MergeRanks = Map<string, number>;
+export interface TokenizerMeta {
+  specials: TokenizerSpecials;
+  decoder_start_token_id: number;
+  /** Map from IndicTrans2 language tag (e.g. "eng_Latn") to its fairseq dict id. */
+  src_lang_ids: Record<string, number>;
+}
 
-/**
- * BPETokenizer — JavaScript port of HuggingFace's BPE tokenizer
- * tailored for IndicTrans2's SentencePiece-style BPE vocabulary.
- */
-export class BPETokenizer {
-  private vocab: Vocab = {};
-  private mergeRanks: MergeRanks = new Map();
-  private idToToken: string[] = [];
-  private srcLang: string;
-  private tgtLang: string;
-  private bosTokenId = 2;
-  private eosTokenId = 3;
-  private padTokenId = 1;
-  private unkTokenId = 0;
-  private initialized = false;
+export interface EncodedInputs {
+  inputIds: Tensor;       // INT64 [1, L]
+  attentionMask: Tensor;  // INT64 [1, L]
+}
 
-  constructor(config: TokenizerConfig) {
-    this.srcLang = config.srcLang;
-    this.tgtLang = config.tgtLang;
+const SESSION_OPTIONS: ort.InferenceSession.SessionOptions = {
+  executionProviders: ['cpu'],
+  graphOptimizationLevel: 'all',
+};
+
+export class OnnxTokenizer {
+  private constructor(
+    private readonly tokSession: InferenceSession,
+    private readonly detokSession: InferenceSession,
+    private readonly meta: TokenizerMeta,
+    public readonly srcLang: string,
+    public readonly tgtLang: string,
+  ) {}
+
+  static async load(
+    tokenizerPath: string,
+    detokenizerPath: string,
+    meta: TokenizerMeta,
+    srcLang: string,
+    tgtLang: string,
+  ): Promise<OnnxTokenizer> {
+    if (!(srcLang in meta.src_lang_ids)) {
+      throw new Error(`Tokenizer: srcLang "${srcLang}" not in this direction's lang table`);
+    }
+    if (!(tgtLang in meta.src_lang_ids)) {
+      throw new Error(`Tokenizer: tgtLang "${tgtLang}" not in this direction's lang table`);
+    }
+    const [tok, detok] = await Promise.all([
+      ort.InferenceSession.create(tokenizerPath, SESSION_OPTIONS),
+      ort.InferenceSession.create(detokenizerPath, SESSION_OPTIONS),
+    ]);
+    return new OnnxTokenizer(tok, detok, meta, srcLang, tgtLang);
   }
 
-  async initialize(vocabJson: string, mergesTxt: string): Promise<void> {
-    // Parse vocab
-    this.vocab = JSON.parse(vocabJson) as Vocab;
-    this.idToToken = new Array(Object.keys(this.vocab).length);
-    for (const [token, id] of Object.entries(this.vocab)) {
-      this.idToToken[id] = token;
-    }
+  async release(): Promise<void> {
+    await Promise.all([this.tokSession.release(), this.detokSession.release()]);
+  }
 
-    // Parse merges
-    const lines = mergesTxt.split('\n').filter((l) => l && !l.startsWith('#'));
-    for (let i = 0; i < lines.length; i++) {
-      this.mergeRanks.set(lines[i], i);
-    }
+  /** Tokenize one sentence. The src/tgt lang tags are baked in by the ONNX graph. */
+  async encode(text: string): Promise<EncodedInputs> {
+    const srcLangId = BigInt(this.meta.src_lang_ids[this.srcLang]);
+    const tgtLangId = BigInt(this.meta.src_lang_ids[this.tgtLang]);
 
-    this.initialized = true;
+    const out = await this.tokSession.run({
+      text: new ort.Tensor('string', [text], [1]),
+      src_lang_id: new ort.Tensor('int64', BigInt64Array.from([srcLangId]), [1]),
+      tgt_lang_id: new ort.Tensor('int64', BigInt64Array.from([tgtLangId]), [1]),
+    });
+
+    return {
+      inputIds: out['input_ids'] as Tensor,
+      attentionMask: out['attention_mask'] as Tensor,
+    };
   }
 
   /**
-   * Encode text to token IDs.
-   * Prepends src_lang token and appends eos + tgt_lang token per IndicTrans2 format.
+   * Decode model output ids back to text. Specials and any language-tag ids
+   * are stripped before being passed into the SentencepieceDecoder graph;
+   * SP would otherwise emit "<unk>" or empty pieces for them.
    */
-  encode(text: string): number[] {
-    if (!this.initialized) throw new Error('Tokenizer not initialized. Call initialize() first.');
+  async decode(ids: number[]): Promise<string> {
+    const { bos, pad, eos } = this.meta.specials;
+    const drop = new Set<number>([bos, pad, eos, ...Object.values(this.meta.src_lang_ids)]);
+    const filtered = ids.filter((id) => !drop.has(id));
+    if (filtered.length === 0) return '';
 
-    const srcLangId = this.vocab[this.srcLang] ?? this.unkTokenId;
-    const tgtLangId = this.vocab[this.tgtLang] ?? this.unkTokenId;
-
-    const wordPieces = this.bpeEncode(text);
-    const ids = wordPieces.map((piece) => this.vocab[piece] ?? this.unkTokenId);
-
-    // IndicTrans2 format: [src_lang_id, ...token_ids, eos_id]
-    // The decoder is primed with [tgt_lang_id] as the first forced token
-    return [srcLangId, ...ids, this.eosTokenId];
+    const idsTensor = new ort.Tensor(
+      'int64',
+      BigInt64Array.from(filtered.map((n) => BigInt(n))),
+      [filtered.length],
+    );
+    const out = await this.detokSession.run({ ids: idsTensor });
+    const strTensor = out['text'] as Tensor;
+    const data = strTensor.data as unknown as string[];
+    return (data[0] ?? '').trim();
   }
 
-  /** Decode token IDs back to text. */
-  decode(ids: number[], skipSpecialTokens = true): string {
-    const specialIds = new Set([this.bosTokenId, this.eosTokenId, this.padTokenId]);
-    const tokens = ids
-      .filter((id) => !skipSpecialTokens || !specialIds.has(id))
-      .map((id) => this.idToToken[id] ?? '<unk>');
-
-    // SentencePiece uses ▁ (U+2581) as word boundary marker
-    return tokens.join('').replace(/▁/g, ' ').trim();
+  get decoderStartId(): number {
+    return this.meta.decoder_start_token_id;
   }
 
-  /** Get the token ID for the target language — used as forced BOS for decoding. */
-  getTgtLangId(): number {
-    return this.vocab[this.tgtLang] ?? this.unkTokenId;
+  get eosId(): number {
+    return this.meta.specials.eos;
   }
 
-  get eosId(): number { return this.eosTokenId; }
-  get padId(): number { return this.padTokenId; }
-
-  // ─── BPE core ─────────────────────────────────────────────────────────────
-
-  private bpeEncode(text: string): string[] {
-    // Pre-tokenize: split on whitespace, add ▁ prefix to each word
-    const words = text.split(/\s+/).filter(Boolean);
-    const result: string[] = [];
-
-    for (const word of words) {
-      const prefixed = '▁' + word;
-      result.push(...this.bpeEncodeWord(prefixed));
-    }
-
-    return result;
+  get padId(): number {
+    return this.meta.specials.pad;
   }
-
-  private bpeEncodeWord(word: string): string[] {
-    // Start with individual characters
-    let symbols: string[] = [...word];
-
-    while (symbols.length > 1) {
-      // Find the pair with the lowest merge rank
-      let bestRank = Infinity;
-      let bestIdx = -1;
-
-      for (let i = 0; i < symbols.length - 1; i++) {
-        const pair = `${symbols[i]} ${symbols[i + 1]}`;
-        const rank = this.mergeRanks.get(pair);
-        if (rank !== undefined && rank < bestRank) {
-          bestRank = rank;
-          bestIdx = i;
-        }
-      }
-
-      if (bestIdx === -1) break; // No more merges possible
-
-      // Apply the best merge
-      const merged = symbols[bestIdx] + symbols[bestIdx + 1];
-      symbols = [
-        ...symbols.slice(0, bestIdx),
-        merged,
-        ...symbols.slice(bestIdx + 2),
-      ];
-    }
-
-    return symbols;
-  }
-}
-
-/**
- * Load and initialise a BPETokenizer from a materialised pack directory.
- * Tokenizer files are stored as `vocab.txt` (JSON content) and `merges.txt`
- * because Metro treats `.json` files as JS modules — `.txt` is bundled as
- * a raw asset and read at runtime via FileSystem.
- */
-export async function loadTokenizer(
-  modelDir: string,
-  srcLang: string,
-  tgtLang: string,
-): Promise<BPETokenizer> {
-  const vocabPath = `${modelDir}/vocab.txt`;
-  const mergesPath = `${modelDir}/merges.txt`;
-
-  const [vocabJson, mergesTxt] = await Promise.all([
-    FileSystem.readAsStringAsync(vocabPath),
-    FileSystem.readAsStringAsync(mergesPath),
-  ]);
-
-  const tokenizer = new BPETokenizer({ vocabPath, mergesPath, srcLang, tgtLang });
-  await tokenizer.initialize(vocabJson, mergesTxt);
-  return tokenizer;
 }

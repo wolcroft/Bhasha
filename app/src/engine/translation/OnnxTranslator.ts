@@ -1,18 +1,25 @@
 /**
  * OnnxTranslator — On-device IndicTrans2 inference via ONNX Runtime
  *
- * Architecture:
- *   1. Encoder  → encodes source tokens to hidden states
- *   2. Decoder  → auto-regressively generates target tokens (greedy or beam)
+ * Pipeline (per sentence):
+ *   raw text
+ *     → IndicProcessor.normalize        (script + whitespace)
+ *     → OnnxTokenizer.encode            (text → input_ids/attention_mask tensors)
+ *     → encoder ONNX                    (→ encoder_hidden_states)
+ *     → greedy / beam decode loop       (→ target ids)
+ *     → OnnxTokenizer.decode            (target ids → text)
  *
- * The encoder and decoder are separate ONNX graphs, matching the split export
- * from export_onnx.py. This is the standard seq2seq ONNX pattern.
+ * The encoder and decoder are separate ONNX graphs (matching the split export
+ * from export_onnx.py). Tokenizer/detokenizer are also separate ONNX graphs
+ * built by build_tokenizer_onnx.py — they use onnxruntime-extensions custom
+ * ops, which means the React Native app must be built with
+ * `onnxruntimeExtensionsEnabled: "true"` in package.json.
  */
 
 import * as ort from 'onnxruntime-react-native';
 import type { InferenceSession, Tensor } from 'onnxruntime-react-native';
-import type { IndicProcessor } from './IndicProcessor';
-import type { BPETokenizer } from './tokenizer';
+import { IndicProcessor } from './IndicProcessor';
+import { OnnxTokenizer, type TokenizerMeta } from './tokenizer';
 
 export type ModelDirection = 'en-indic' | 'indic-en' | 'indic-indic';
 
@@ -27,30 +34,46 @@ export interface TranslationResult {
   latencyMs: number;
 }
 
+/** File-URI bundle for one model direction (resolved by the asset layer). */
+export interface ModelPaths {
+  encoder: string;
+  decoder: string;
+  tokenizer: string;
+  detokenizer: string;
+  /** Parsed contents of tokens.json — already in memory because it's a JS require. */
+  tokensMeta: TokenizerMeta;
+}
+
 /**
- * Manages ONNX encoder + decoder sessions for one model direction.
+ * Manages encoder + decoder + tokenizer/detokenizer ONNX sessions for one
+ * model direction. Holds them across translate() calls so loading happens
+ * exactly once per direction switch.
  */
 export class OnnxTranslator {
   private encSession: InferenceSession | null = null;
   private decSession: InferenceSession | null = null;
+  private tokenizer: OnnxTokenizer | null = null;
   private direction: ModelDirection | null = null;
+  private srcLang: string | null = null;
+  private tgtLang: string | null = null;
 
-  constructor(
-    private processor: IndicProcessor,
-    private tokenizer: BPETokenizer,
-  ) {}
+  private readonly processor = new IndicProcessor();
 
-  /**
-   * Load encoder + decoder ONNX models for a given direction.
-   * modelDir is the local file:// path to the extracted model pack.
-   */
-  async load(modelDir: string, direction: ModelDirection): Promise<void> {
-    if (this.direction === direction && this.encSession) return;
-
+  async load(
+    paths: ModelPaths,
+    direction: ModelDirection,
+    srcLang: string,
+    tgtLang: string,
+  ): Promise<void> {
+    if (
+      this.direction === direction &&
+      this.srcLang === srcLang &&
+      this.tgtLang === tgtLang &&
+      this.encSession
+    ) {
+      return;
+    }
     await this.unload();
-
-    const encPath = `${modelDir}/encoder_model_int8.onnx`;
-    const decPath = `${modelDir}/decoder_model_int8.onnx`;
 
     const sessionOptions: ort.InferenceSession.SessionOptions = {
       executionProviders: ['cpu'],
@@ -58,102 +81,75 @@ export class OnnxTranslator {
       intraOpNumThreads: 4,
     };
 
-    [this.encSession, this.decSession] = await Promise.all([
-      ort.InferenceSession.create(encPath, sessionOptions),
-      ort.InferenceSession.create(decPath, sessionOptions),
+    [this.encSession, this.decSession, this.tokenizer] = await Promise.all([
+      ort.InferenceSession.create(paths.encoder, sessionOptions),
+      ort.InferenceSession.create(paths.decoder, sessionOptions),
+      OnnxTokenizer.load(paths.tokenizer, paths.detokenizer, paths.tokensMeta, srcLang, tgtLang),
     ]);
 
     this.direction = direction;
+    this.srcLang = srcLang;
+    this.tgtLang = tgtLang;
   }
 
   async unload(): Promise<void> {
     await this.encSession?.release();
     await this.decSession?.release();
+    await this.tokenizer?.release();
     this.encSession = null;
     this.decSession = null;
+    this.tokenizer = null;
     this.direction = null;
+    this.srcLang = null;
+    this.tgtLang = null;
   }
 
   get isLoaded(): boolean {
-    return this.encSession !== null && this.decSession !== null;
+    return this.encSession !== null && this.decSession !== null && this.tokenizer !== null;
   }
 
-  /**
-   * Translate a single string from srcLang to tgtLang.
-   * Splits long inputs into sentences and joins them.
-   */
-  async translate(
-    text: string,
-    srcLang: string,
-    tgtLang: string,
-    options: TranslatorOptions = {},
-  ): Promise<TranslationResult> {
-    if (!this.isLoaded) throw new Error('OnnxTranslator: models not loaded. Call load() first.');
+  async translate(text: string, options: TranslatorOptions = {}): Promise<TranslationResult> {
+    if (!this.isLoaded) throw new Error('OnnxTranslator: not loaded. Call load() first.');
 
     const start = Date.now();
     const { maxLength = 256, beamSize = 5, lengthPenalty = 0.6 } = options;
+    const tokenizer = this.tokenizer!;
 
-    const sentences = this.processor.splitIntoSentences(text, srcLang);
+    const sentences = this.processor.splitIntoSentences(text, this.srcLang!);
     const translations: string[] = [];
 
-    for (const sentence of sentences) {
-      const batch = this.processor.preprocess([sentence], srcLang, tgtLang);
-      const ids = await this.translateOne(
-        batch.inputIds[0],
-        batch.attentionMasks[0],
-        maxLength,
-        beamSize,
-        lengthPenalty,
-      );
-      translations.push(this.processor.postprocess(ids));
+    for (const raw of sentences) {
+      const normalized = this.processor.normalize(raw, this.srcLang!);
+      const { inputIds, attentionMask } = await tokenizer.encode(normalized);
+      const ids = await this.translateOne(inputIds, attentionMask, maxLength, beamSize, lengthPenalty);
+      translations.push(await tokenizer.decode(ids));
     }
 
     return {
-      translation: translations.join(' '),
+      translation: translations.join(' ').trim(),
       latencyMs: Date.now() - start,
     };
   }
 
   /** Encode source then dispatch to greedy or beam search. */
   private async translateOne(
-    inputIds: number[],
-    attentionMask: number[],
+    inputIds: Tensor,
+    attentionMask: Tensor,
     maxLength: number,
     beamSize: number,
     lengthPenalty: number,
   ): Promise<number[]> {
     const enc = this.encSession!;
-
-    const seqLen = inputIds.length;
-
-    const inputIdsTensor = new ort.Tensor(
-      'int64',
-      BigInt64Array.from(inputIds.map(BigInt)),
-      [1, seqLen],
-    );
-    const attentionMaskTensor = new ort.Tensor(
-      'int64',
-      BigInt64Array.from(attentionMask.map(BigInt)),
-      [1, seqLen],
-    );
-
     const encOutput = await enc.run({
-      input_ids: inputIdsTensor,
-      attention_mask: attentionMaskTensor,
+      input_ids: inputIds,
+      attention_mask: attentionMask,
     });
-
     const encoderHiddenStates = encOutput['last_hidden_state'] as Tensor;
 
     if (beamSize <= 1) {
-      return this.greedyDecode(encoderHiddenStates, attentionMaskTensor, maxLength);
+      return this.greedyDecode(encoderHiddenStates, attentionMask, maxLength);
     }
-    return this.beamSearchDecode(
-      encoderHiddenStates,
-      attentionMaskTensor,
-      maxLength,
-      beamSize,
-      lengthPenalty,
-    );
+    return this.beamSearchDecode(encoderHiddenStates, attentionMask, maxLength, beamSize, lengthPenalty);
   }
 
   // ─── Greedy decode ─────────────────────────────────────────────────────────
@@ -164,13 +160,14 @@ export class OnnxTranslator {
     maxLength: number,
   ): Promise<number[]> {
     const dec = this.decSession!;
-    const tgtLangId = this.tokenizer.getTgtLangId();
-    const generated: number[] = [tgtLangId];
+    const tok = this.tokenizer!;
+    // IndicTrans2 uses </s> as the decoder start token (decoder_start_token_id == eos).
+    const generated: number[] = [tok.decoderStartId];
 
     for (let step = 0; step < maxLength; step++) {
       const decInputIds = new ort.Tensor(
         'int64',
-        BigInt64Array.from(generated.map(BigInt)),
+        BigInt64Array.from(generated.map((n) => BigInt(n))),
         [1, generated.length],
       );
 
@@ -187,7 +184,9 @@ export class OnnxTranslator {
       const next = argmax(data, offset, vocabSize);
       generated.push(next);
 
-      if (next === this.tokenizer.eosId) break;
+      // The first token is the synthetic start (== eos id), so we only treat
+      // a *generated* eos as the stop condition.
+      if (step > 0 && next === tok.eosId) break;
     }
 
     return generated;
@@ -199,8 +198,8 @@ export class OnnxTranslator {
   //   - Maintains `beamSize` active beams (with running log-prob sums)
   //   - At each step, expands every beam to the top-`beamSize` next tokens
   //   - Keeps the global top-`beamSize` candidates
-  //   - Finished beams (hit EOS) are scored with length penalty
-  //     (length ** alpha) and held aside
+  //   - Finished beams (hit EOS) are scored with length penalty (length ** alpha)
+  //     and held aside
   //   - Stops when all beams have finished or maxLength is reached
   //
   // Note: each beam triggers a separate decoder forward pass per step. This is
@@ -214,11 +213,12 @@ export class OnnxTranslator {
     lengthPenalty: number,
   ): Promise<number[]> {
     const dec = this.decSession!;
-    const eosId = this.tokenizer.eosId;
-    const tgtLangId = this.tokenizer.getTgtLangId();
+    const tok = this.tokenizer!;
+    const eosId = tok.eosId;
+    const startId = tok.decoderStartId;
 
     interface Beam { tokens: number[]; score: number; }
-    let beams: Beam[] = [{ tokens: [tgtLangId], score: 0 }];
+    let beams: Beam[] = [{ tokens: [startId], score: 0 }];
     const finished: Beam[] = [];
 
     for (let step = 0; step < maxLength; step++) {
@@ -227,7 +227,7 @@ export class OnnxTranslator {
       for (const beam of beams) {
         const decInputIds = new ort.Tensor(
           'int64',
-          BigInt64Array.from(beam.tokens.map(BigInt)),
+          BigInt64Array.from(beam.tokens.map((n) => BigInt(n))),
           [1, beam.tokens.length],
         );
 
@@ -242,10 +242,7 @@ export class OnnxTranslator {
         const data = logits.data as Float32Array;
         const offset = (beam.tokens.length - 1) * vocabSize;
 
-        // Convert last-step logits to log-probs
         const logProbs = logSoftmax(data, offset, vocabSize);
-
-        // Top-k expansion for this beam
         const topK = topKIndices(logProbs, beamSize);
         for (const idx of topK) {
           candidates.push({
@@ -255,14 +252,13 @@ export class OnnxTranslator {
         }
       }
 
-      // Sort candidates by raw score, take top beamSize
       candidates.sort((a, b) => b.score - a.score);
       const next: Beam[] = [];
-
       for (const cand of candidates) {
         if (next.length >= beamSize) break;
         const lastTok = cand.tokens[cand.tokens.length - 1];
-        if (lastTok === eosId) {
+        // Same caveat as greedy: only treat a *generated* eos as final.
+        if (cand.tokens.length > 1 && lastTok === eosId) {
           finished.push(cand);
         } else {
           next.push(cand);
@@ -273,19 +269,16 @@ export class OnnxTranslator {
       if (beams.length === 0) break;
     }
 
-    // Add any unfinished beams to the candidate pool with EOS appended
     for (const beam of beams) {
       finished.push({ tokens: [...beam.tokens, eosId], score: beam.score });
     }
 
-    // Length-normalised scoring: score / length^alpha
     const scored = finished.map((b) => ({
       beam: b,
       norm: b.score / Math.pow(b.tokens.length, lengthPenalty),
     }));
     scored.sort((a, b) => b.norm - a.norm);
-
-    return scored[0]?.beam.tokens ?? [tgtLangId, eosId];
+    return scored[0]?.beam.tokens ?? [startId, eosId];
   }
 }
 
@@ -305,7 +298,6 @@ function argmax(arr: Float32Array, offset = 0, length = arr.length): number {
 }
 
 function logSoftmax(arr: Float32Array, offset: number, length: number): Float32Array {
-  // Numerically stable log-softmax
   let max = -Infinity;
   for (let i = 0; i < length; i++) {
     const v = arr[offset + i];
@@ -326,7 +318,6 @@ function logSoftmax(arr: Float32Array, offset: number, length: number): Float32A
 
 /** Returns indices of the k largest values in arr (descending). */
 function topKIndices(arr: Float32Array, k: number): number[] {
-  // Min-heap of size k (kept simple — array of {idx, val})
   const heap: { idx: number; val: number }[] = [];
   for (let i = 0; i < arr.length; i++) {
     if (heap.length < k) {
@@ -337,22 +328,16 @@ function topKIndices(arr: Float32Array, k: number): number[] {
       heap.sort((a, b) => a.val - b.val);
     }
   }
-  return heap
-    .sort((a, b) => b.val - a.val)
-    .map((h) => h.idx);
+  return heap.sort((a, b) => b.val - a.val).map((h) => h.idx);
 }
 
 // ─── Singleton cache ──────────────────────────────────────────────────────────
 
 const translatorCache = new Map<ModelDirection, OnnxTranslator>();
 
-export function getTranslator(
-  direction: ModelDirection,
-  processor: IndicProcessor,
-  tokenizer: BPETokenizer,
-): OnnxTranslator {
+export function getTranslator(direction: ModelDirection): OnnxTranslator {
   if (!translatorCache.has(direction)) {
-    translatorCache.set(direction, new OnnxTranslator(processor, tokenizer));
+    translatorCache.set(direction, new OnnxTranslator());
   }
   return translatorCache.get(direction)!;
 }

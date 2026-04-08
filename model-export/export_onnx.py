@@ -44,6 +44,16 @@ MODEL_DIRS = {
     "indic-indic": MODELS_DIR / "indic-indic",
 }
 
+# Sample (src_lang, tgt_lang) pair used for the export tracing pass.
+# IndicTrans2's tokenizer refuses to tokenize unless these tags are set.
+# The choice of *which* language pair doesn't affect the exported graph
+# topology, only the dummy ids that flow through during tracing.
+SAMPLE_LANGS = {
+    "en-indic":   ("eng_Latn", "hin_Deva"),
+    "indic-en":   ("hin_Deva", "eng_Latn"),
+    "indic-indic": ("hin_Deva", "tam_Taml"),
+}
+
 # ─── Encoder wrapper ──────────────────────────────────────────────────────────
 
 class EncoderWrapper(nn.Module):
@@ -87,17 +97,20 @@ class DecoderWrapper(nn.Module):
 
 # ─── Export helpers ───────────────────────────────────────────────────────────
 
-def _dummy_inputs(tokenizer, device: torch.device):
-    sample = "This is a test sentence for export validation."
+def _dummy_inputs(tokenizer, device: torch.device, src_lang: str, tgt_lang: str):
+    """Build dummy encoder inputs. IndicTrans2's custom tokenizer expects
+    `<src_lang> <tgt_lang>` to be prepended to the raw text string — this
+    is what AI4Bharat's IndicProcessor does in its reference pipeline."""
+    sample = f"{src_lang} {tgt_lang} This is a test sentence for export validation."
     enc = tokenizer(sample, return_tensors="pt", padding=True).to(device)
     return enc["input_ids"], enc["attention_mask"]
 
 
-def export_encoder(model, tokenizer, out_dir: Path, device: torch.device):
+def export_encoder(model, tokenizer, out_dir: Path, device: torch.device, src_lang: str, tgt_lang: str):
     print("  [encoder] wrapping...")
     wrapper = EncoderWrapper(model.model.encoder).eval().to(device)
 
-    input_ids, attention_mask = _dummy_inputs(tokenizer, device)
+    input_ids, attention_mask = _dummy_inputs(tokenizer, device, src_lang, tgt_lang)
 
     print("  [encoder] exporting...")
     out_path = out_dir / "encoder_model.onnx"
@@ -119,11 +132,11 @@ def export_encoder(model, tokenizer, out_dir: Path, device: torch.device):
     return out_path
 
 
-def export_decoder(model, tokenizer, out_dir: Path, device: torch.device):
+def export_decoder(model, tokenizer, out_dir: Path, device: torch.device, src_lang: str, tgt_lang: str):
     print("  [decoder] wrapping...")
     wrapper = DecoderWrapper(model).eval().to(device)
 
-    input_ids, attention_mask = _dummy_inputs(tokenizer, device)
+    input_ids, attention_mask = _dummy_inputs(tokenizer, device, src_lang, tgt_lang)
 
     # Get encoder hidden states for dummy decoder input
     with torch.no_grad():
@@ -197,11 +210,13 @@ def main():
 
     print(f"    Model loaded. Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M")
 
+    src_lang, tgt_lang = SAMPLE_LANGS[args.model]
+
     with torch.no_grad():
-        export_encoder(model, tokenizer, out_dir, device)
+        export_encoder(model, tokenizer, out_dir, device, src_lang, tgt_lang)
         # Free encoder-export buffers before tracing the decoder
         gc.collect()
-        export_decoder(model, tokenizer, out_dir, device)
+        export_decoder(model, tokenizer, out_dir, device, src_lang, tgt_lang)
 
     # Drop the FP32 model + autograd graphs from RAM before returning
     del model

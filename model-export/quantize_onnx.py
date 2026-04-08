@@ -51,7 +51,6 @@ def quantize_model(model_name: str) -> None:
             str(preprocessed),
             str(dst_path),
             weight_type=QuantType.QInt8,
-            optimize_model=True,
         )
 
         src_mb = src_path.stat().st_size / 1e6

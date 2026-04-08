@@ -22,8 +22,8 @@ import {
   LANGUAGE_PACKS,
   getEncoderPath,
   getDecoderPath,
-  getVocabPath,
-  getMergesPath,
+  getTokenizerPath,
+  getDetokenizerPath,
 } from './LanguagePack';
 import { BUNDLED_MODELS } from './bundledAssets';
 import { setModelVersion, updateSettings, getSettings } from './storage';
@@ -90,14 +90,22 @@ export async function downloadPack(pack: LanguagePack): Promise<void> {
     await FileSystem.makeDirectoryAsync(destDir, { intermediates: true });
 
     const sources = BUNDLED_MODELS[id];
-    const destinations: Record<keyof typeof sources, string> = {
-      encoder: getEncoderPath(id),
-      decoder: getDecoderPath(id),
-      vocab: getVocabPath(id),
-      merges: getMergesPath(id),
+    // Only the .onnx require()-IDs need to be materialised to disk;
+    // tokensMeta is already a parsed JS object held in memory.
+    const fileSources = {
+      encoder:     sources.encoder,
+      decoder:     sources.decoder,
+      tokenizer:   sources.tokenizer,
+      detokenizer: sources.detokenizer,
+    } as const;
+    const destinations: Record<keyof typeof fileSources, string> = {
+      encoder:     getEncoderPath(id),
+      decoder:     getDecoderPath(id),
+      tokenizer:   getTokenizerPath(id),
+      detokenizer: getDetokenizerPath(id),
     };
 
-    const entries = Object.entries(sources) as [keyof typeof sources, number][];
+    const entries = Object.entries(fileSources) as [keyof typeof fileSources, number][];
     let copied = 0;
 
     for (const [key, moduleId] of entries) {
