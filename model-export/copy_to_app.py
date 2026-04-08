@@ -29,7 +29,7 @@ ROOT = Path(__file__).parent
 QUANTIZED_DIR = ROOT / "onnx-quantized"
 APP_ASSETS = ROOT.parent / "app" / "assets" / "models"
 
-DIRECTIONS = ["en-indic", "indic-en", "indic-indic"]
+DIRECTIONS = ["en-indic", "indic-en", "indic-indic", "en-lus_Latn", "en-kha_Latn"]
 ASSET_FILES = (
     "encoder_model_int8.onnx",
     "decoder_model_int8.onnx",
@@ -75,9 +75,6 @@ def main() -> None:
     success, failure = [], []
 
     for direction in targets:
-        if direction not in DIRECTIONS:
-            print(f"Unknown direction: {direction}")
-            continue
         (success if copy_one(direction) else failure).append(direction)
 
     print(f"\nCopied: {success}")

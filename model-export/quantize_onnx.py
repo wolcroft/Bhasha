@@ -22,7 +22,7 @@ from onnxruntime.quantization.shape_inference import quant_pre_process
 ONNX_DIR = Path(__file__).parent / "onnx"
 QUANTIZED_DIR = Path(__file__).parent / "onnx-quantized"
 
-MODEL_NAMES = ["en-indic", "indic-en", "indic-indic"]
+MODEL_NAMES = ["en-indic", "indic-en", "indic-indic", "en-lus_Latn", "en-kha_Latn"]
 MODEL_FILES = ["encoder_model.onnx", "decoder_model.onnx"]
 
 

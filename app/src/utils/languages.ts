@@ -89,11 +89,24 @@ export const LANGUAGES: Language[] = [
   },
   {
     code: 'mni_Mtei',
-    name: 'Manipuri',
+    name: 'Manipuri (Meitei script)',
     nativeName: 'ꯃꯤꯇꯩꯂꯣꯟ',
     script: 'Mtei',
     tier: 1,
     romanizedInput: true,
+    neStates: ['Manipur'],
+    hasBaseModel: true,
+  },
+  {
+    // Many Manipuri speakers, especially in older texts and the Bengali-script
+    // diaspora, write Meitei in Bengali script. Both code variants exist in
+    // the IndicTrans2 distilled-200M dict (mni_Beng id 911, mni_Mtei id 6603)
+    // and are supported by all three direction models out of the box.
+    code: 'mni_Beng',
+    name: 'Manipuri (Bengali script)',
+    nativeName: 'মৈতৈলোন্',
+    script: 'Beng',
+    tier: 1,
     neStates: ['Manipur'],
     hasBaseModel: true,
   },
@@ -120,13 +133,18 @@ export const LANGUAGES: Language[] = [
 
   // ─── Tier 2 — Need LoRA fine-tuning, listed but flagged ──────────────────
   {
+    // Nagamese is the Assamese-based creole used as lingua franca across all
+    // of Nagaland (~2M speakers, 16+ tribes). It is written in Latin script.
+    // The IndicTrans2 dict has no nag_Latn embedding, so we reuse the
+    // lus_Latn slot (id 32162) — the LoRA adapter is trained with that tag
+    // and the tokenizer injects it. Mizo is moved to Tier 3 as a result.
     code: 'lus_Latn',
-    name: 'Mizo',
-    nativeName: 'Mizo ṭawng',
+    name: 'Nagamese',
+    nativeName: 'Nagamese',
     script: 'Latn',
     tier: 2,
-    neStates: ['Mizoram'],
-    hasBaseModel: false,
+    neStates: ['Nagaland'],
+    hasBaseModel: true,
   },
   {
     code: 'kha_Latn',
@@ -141,6 +159,39 @@ export const LANGUAGES: Language[] = [
   // AI4Bharat has no Garo data, the available bible/community corpora are
   // too small for a usable LoRA, and shipping a stub would mislead users.
   // Re-add when we have a real parallel corpus.
+
+  // ─── Tier 3 — Blocked at the base-model level, listed as "coming soon" ───
+  // None of these have a language-tag embedding in IndicTrans2's en-indic
+  // dict, so even a LoRA cannot make them work — the base model has no
+  // representation for them at all. They are listed (greyed out in the UI)
+  // so users from Nagaland are not silently omitted.
+  {
+    // Mizo (lus_Latn) had its model slot reassigned to Nagamese — the lus_Latn
+    // embedding (id 32162) is the only available Latin-script vacancy in the
+    // IndicTrans2 dict and Nagamese has higher reach (Nagaland lingua franca,
+    // ~2M speakers). Mizo stays listed here so Mizoram users are not omitted.
+    // Re-enable when IndicTrans2 adds a dedicated slot, OR if a second
+    // vacant Latin-script slot is found.
+    code: 'lus_Latn_mizo',  // sentinel — not a real model code
+    name: 'Mizo',
+    nativeName: 'Mizo ṭawng',
+    script: 'Latn',
+    tier: 3,
+    neStates: ['Mizoram'],
+    hasBaseModel: false,
+  },
+  {
+    code: 'njo_Latn',
+    name: 'Ao Naga',
+    nativeName: 'Ao',
+    script: 'Latn',
+    tier: 3,
+    neStates: ['Nagaland'],
+    hasBaseModel: false,
+  },
+  // Other Naga languages blocked the same way: Angami (njm), Lotha (njh),
+  // Sema (nsm), Konyak (nbe). Add them once IndicTrans2 v3 / BPCC v3 ships
+  // with Naga coverage, OR if we train a dedicated NMT from scratch.
 ];
 
 /** Languages that have ONNX models bundled with the app and work today. */
@@ -148,6 +199,9 @@ export const SHIPPING_LANGUAGES: Language[] = LANGUAGES.filter((l) => l.tier ===
 
 /** Languages listed in the picker but require future LoRA work. */
 export const PLANNED_LANGUAGES: Language[] = LANGUAGES.filter((l) => l.tier === 2);
+
+/** Languages listed as "coming soon" — blocked at the base-model level. */
+export const FUTURE_LANGUAGES: Language[] = LANGUAGES.filter((l) => l.tier === 3);
 
 export function getLanguage(code: string): Language | undefined {
   return LANGUAGES.find((l) => l.code === code);
@@ -175,10 +229,27 @@ export function getLanguageGroups(): { script: Script; label: string; languages:
   return groups.filter((g) => g.languages.length > 0);
 }
 
-/** Returns the model direction key for a given source/target language pair. */
-export function getModelDirection(srcCode: string, tgtCode: string): 'en-indic' | 'indic-en' | 'indic-indic' {
+/**
+ * Language codes that use a dedicated LoRA-merged model bundle rather than
+ * one of the three base direction bundles. Only English→LoRA is supported
+ * in v1 (the reverse direction requires a separate indic-en LoRA adapter).
+ */
+const LORA_EN_TARGET_CODES = new Set(['lus_Latn', 'kha_Latn']);
+
+export type ModelDirection =
+  | 'en-indic'
+  | 'indic-en'
+  | 'indic-indic'
+  | 'en-lus_Latn'
+  | 'en-kha_Latn';
+
+/** Returns the model bundle key for a given source/target language pair. */
+export function getModelDirection(srcCode: string, tgtCode: string): ModelDirection {
   const srcIsEnglish = srcCode === 'eng_Latn';
   const tgtIsEnglish = tgtCode === 'eng_Latn';
+  if (srcIsEnglish && LORA_EN_TARGET_CODES.has(tgtCode)) {
+    return `en-${tgtCode}` as ModelDirection;
+  }
   if (srcIsEnglish) return 'en-indic';
   if (tgtIsEnglish) return 'indic-en';
   return 'indic-indic';
@@ -188,5 +259,12 @@ export function getModelDirection(srcCode: string, tgtCode: string): 'en-indic' 
 export function isPairSupported(srcCode: string, tgtCode: string): boolean {
   const src = getLanguage(srcCode);
   const tgt = getLanguage(tgtCode);
-  return Boolean(src?.hasBaseModel && tgt?.hasBaseModel);
+  if (!src?.hasBaseModel || !tgt?.hasBaseModel) return false;
+  // LoRA-fine-tuned languages only have an English→X model (en-lus_Latn,
+  // en-kha_Latn). There is no trained X→English or X→X LoRA — routing those
+  // pairs to the base indic-en model would produce garbled output because
+  // the base model has never seen those language codes on the source side.
+  if (LORA_EN_TARGET_CODES.has(srcCode)) return false;
+  if (LORA_EN_TARGET_CODES.has(tgtCode) && srcCode !== 'eng_Latn') return false;
+  return true;
 }

@@ -36,12 +36,16 @@ torch.set_num_threads(2)
 torch.set_grad_enabled(False)  # No autograd buffers needed for export
 
 MODELS_DIR = Path(__file__).parent / "models"
+MODELS_MERGED_DIR = Path(__file__).parent / "models-merged"
 ONNX_DIR = Path(__file__).parent / "onnx"
 
 MODEL_DIRS = {
-    "en-indic": MODELS_DIR / "en-indic",
-    "indic-en": MODELS_DIR / "indic-en",
-    "indic-indic": MODELS_DIR / "indic-indic",
+    "en-indic":     MODELS_DIR / "en-indic",
+    "indic-en":     MODELS_DIR / "indic-en",
+    "indic-indic":  MODELS_DIR / "indic-indic",
+    # LoRA-merged models — en- + <lora-lang-slot>
+    "en-lus_Latn":  MODELS_MERGED_DIR / "en-lus_Latn",   # Nagamese (lus_Latn slot)
+    "en-kha_Latn":  MODELS_MERGED_DIR / "en-kha_Latn",   # Khasi
 }
 
 # Sample (src_lang, tgt_lang) pair used for the export tracing pass.
@@ -49,9 +53,11 @@ MODEL_DIRS = {
 # The choice of *which* language pair doesn't affect the exported graph
 # topology, only the dummy ids that flow through during tracing.
 SAMPLE_LANGS = {
-    "en-indic":   ("eng_Latn", "hin_Deva"),
-    "indic-en":   ("hin_Deva", "eng_Latn"),
+    "en-indic":    ("eng_Latn", "hin_Deva"),
+    "indic-en":    ("hin_Deva", "eng_Latn"),
     "indic-indic": ("hin_Deva", "tam_Taml"),
+    "en-lus_Latn": ("eng_Latn", "lus_Latn"),
+    "en-kha_Latn": ("eng_Latn", "kha_Latn"),
 }
 
 # ─── Encoder wrapper ──────────────────────────────────────────────────────────
@@ -198,13 +204,18 @@ def main():
     print(f"\n==> Exporting {args.model} on {device}")
     print(f"    Loading model from {model_path} ...")
 
-    tokenizer = AutoTokenizer.from_pretrained(str(model_path), trust_remote_code=True)
-    # `low_cpu_mem_usage=True` streams weights from disk to the model rather
-    # than holding two copies in RAM during init — critical on 8 GB Macs.
+    # LoRA-merged models share the base en-indic tokenizer — load from there
+    # to avoid a broken kwargs conflict in the saved merged tokenizer copy.
+    is_lora_merged = args.model not in ("en-indic", "indic-en", "indic-indic")
+    tok_path = MODELS_DIR / "en-indic" if is_lora_merged else model_path
+    tokenizer = AutoTokenizer.from_pretrained(str(tok_path), trust_remote_code=True)
+    # `low_cpu_mem_usage=True` streams weights from disk rather than holding
+    # two copies in RAM — critical on 8 GB Macs. Disabled for LoRA-merged
+    # models which are safetensors and don't support meta-tensor device moves.
     model = AutoModelForSeq2SeqLM.from_pretrained(
         str(model_path),
         trust_remote_code=True,
-        low_cpu_mem_usage=True,
+        low_cpu_mem_usage=not is_lora_merged,
         torch_dtype=torch.float32,
     ).eval().to(device)
 

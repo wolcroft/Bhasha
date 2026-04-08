@@ -1,9 +1,10 @@
 /**
  * Tests for LanguagePack metadata + path helpers.
  *
- * The bundled-asset model means there are exactly three packs in v1.0:
- * en-indic, indic-en, and indic-indic. These tests guard the pack list and
- * the file-path helpers used by ModelManager and the BPE tokenizer loader.
+ * v1.0 ships five packs: three base direction models (en-indic, indic-en,
+ * indic-indic) plus two LoRA-fine-tuned packs (en-lus_Latn for Nagamese,
+ * en-kha_Latn for Khasi). These tests guard the pack list and the file-path
+ * helpers used by ModelManager and EngineContext.
  */
 
 import {
@@ -18,9 +19,9 @@ import {
 } from '../models/LanguagePack';
 
 describe('LANGUAGE_PACKS', () => {
-  it('ships exactly three pack directions', () => {
+  it('ships five pack directions (3 base + 2 LoRA)', () => {
     const ids = LANGUAGE_PACKS.map((p) => p.id).sort();
-    expect(ids).toEqual(['en-indic', 'indic-en', 'indic-indic']);
+    expect(ids).toEqual(['en-indic', 'en-kha_Latn', 'en-lus_Latn', 'indic-en', 'indic-indic']);
   });
 
   it('every pack has a non-empty name and description', () => {

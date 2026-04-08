@@ -10,6 +10,7 @@ import {
   LANGUAGES,
   SHIPPING_LANGUAGES,
   PLANNED_LANGUAGES,
+  FUTURE_LANGUAGES,
   getLanguage,
   getLanguagesByScript,
   getLanguageGroups,
@@ -25,27 +26,58 @@ describe('Northeast language list', () => {
     expect(getLanguage('eng_Latn')?.hasBaseModel).toBe(true);
   });
 
-  it('contains exactly the six tier-1 NE languages plus English', () => {
+  it('contains exactly the seven tier-1 NE languages plus English', () => {
     const expected = [
       'eng_Latn',
       'asm_Beng', 'ben_Beng', 'brx_Deva',
-      'mni_Mtei', 'npi_Deva', 'sat_Olck',
+      'mni_Mtei', 'mni_Beng', 'npi_Deva', 'sat_Olck',
     ];
     const actual = SHIPPING_LANGUAGES.map((l) => l.code).sort();
     expect(actual).toEqual(expected.sort());
   });
 
-  it('lists Mizo and Khasi as Tier-2 (planned via LoRA)', () => {
+  it('exposes Manipuri in both Meitei and Bengali scripts', () => {
+    const mtei = getLanguage('mni_Mtei');
+    const beng = getLanguage('mni_Beng');
+    expect(mtei?.tier).toBe(1);
+    expect(beng?.tier).toBe(1);
+    expect(mtei?.hasBaseModel).toBe(true);
+    expect(beng?.hasBaseModel).toBe(true);
+    expect(mtei?.neStates).toContain('Manipur');
+    expect(beng?.neStates).toContain('Manipur');
+  });
+
+  it('covers Nagaland — Nagamese as Tier-2, Ao Naga as Tier-3', () => {
+    const nagamese = getLanguage('lus_Latn');
+    expect(nagamese?.name).toBe('Nagamese');
+    expect(nagamese?.tier).toBe(2);
+    expect(nagamese?.neStates).toContain('Nagaland');
+
+    const ao = getLanguage('njo_Latn');
+    expect(ao?.tier).toBe(3);
+    expect(ao?.neStates).toContain('Nagaland');
+  });
+
+  it('lists Nagamese and Khasi as Tier-2 (LoRA fine-tuned)', () => {
     const tier2Codes = PLANNED_LANGUAGES.map((l) => l.code).sort();
     expect(tier2Codes).toEqual(['kha_Latn', 'lus_Latn']);
-    for (const lang of PLANNED_LANGUAGES) {
-      expect(lang.hasBaseModel).toBe(false);
-    }
+    const nagamese = PLANNED_LANGUAGES.find((l) => l.code === 'lus_Latn');
+    expect(nagamese?.name).toBe('Nagamese');
+    expect(nagamese?.neStates).toContain('Nagaland');
+    // Nagamese LoRA is trained — hasBaseModel true; Khasi pending training
+    expect(nagamese?.hasBaseModel).toBe(true);
   });
 
   it('does not list Garo (dropped from v1 — no usable parallel corpus)', () => {
     const codes = LANGUAGES.map((l) => l.code);
     expect(codes).not.toContain('grt_Latn');
+  });
+
+  it('lists Mizo as Tier-3 (slot reassigned to Nagamese)', () => {
+    const mizo = FUTURE_LANGUAGES.find((l) => l.name === 'Mizo');
+    expect(mizo).toBeDefined();
+    expect(mizo?.tier).toBe(3);
+    expect(mizo?.neStates).toContain('Mizoram');
   });
 
   it('does not include any non-NE Indic languages (e.g. Tamil, Telugu, Hindi)', () => {
@@ -87,7 +119,7 @@ describe('Northeast language list', () => {
 
   it('getLanguagesByScript filters correctly', () => {
     const beng = getLanguagesByScript('Beng').map((l) => l.code).sort();
-    expect(beng).toEqual(['asm_Beng', 'ben_Beng']);
+    expect(beng).toEqual(['asm_Beng', 'ben_Beng', 'mni_Beng']);
   });
 });
 
@@ -104,6 +136,11 @@ describe('getModelDirection', () => {
     expect(getModelDirection('asm_Beng', 'mni_Mtei')).toBe('indic-indic');
     expect(getModelDirection('ben_Beng', 'sat_Olck')).toBe('indic-indic');
   });
+
+  it('routes English → LoRA languages to their dedicated bundles', () => {
+    expect(getModelDirection('eng_Latn', 'lus_Latn')).toBe('en-lus_Latn');
+    expect(getModelDirection('eng_Latn', 'kha_Latn')).toBe('en-kha_Latn');
+  });
 });
 
 describe('isPairSupported', () => {
@@ -112,9 +149,21 @@ describe('isPairSupported', () => {
     expect(isPairSupported('asm_Beng', 'mni_Mtei')).toBe(true);
   });
 
-  it('rejects pairs that involve a tier-2 language', () => {
-    expect(isPairSupported('eng_Latn', 'lus_Latn')).toBe(false);
+  it('accepts English → Nagamese (LoRA trained forward direction)', () => {
+    expect(isPairSupported('eng_Latn', 'lus_Latn')).toBe(true);
+  });
+
+  it('rejects Nagamese → English (no reverse indic-en LoRA trained)', () => {
+    expect(isPairSupported('lus_Latn', 'eng_Latn')).toBe(false);
+  });
+
+  it('rejects Nagamese → other Indic (no reverse LoRA)', () => {
+    expect(isPairSupported('lus_Latn', 'asm_Beng')).toBe(false);
+  });
+
+  it('rejects pairs that involve Khasi (not yet trained)', () => {
     expect(isPairSupported('kha_Latn', 'eng_Latn')).toBe(false);
+    expect(isPairSupported('eng_Latn', 'kha_Latn')).toBe(false);
   });
 
   it('rejects unknown language codes', () => {

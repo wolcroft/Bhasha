@@ -60,8 +60,11 @@ DATA_DIR = ROOT / "data"
 ADAPTER_DIR = ROOT / "lora-adapters"
 
 # Tier-2 NE language codes that this script supports.
+# NOTE: lus_Latn is the IndicTrans2 dict slot (id 32162) being REUSED for
+# Nagamese — the base model has no nag_Latn embedding, so we borrow the
+# only spare Latin-script slot. The LoRA adapter is trained with this tag.
 TIER2_LANGS = {
-    "lus_Latn": "Mizo",
+    "lus_Latn": "Nagamese",
     "kha_Latn": "Khasi",
 }
 
@@ -93,18 +96,22 @@ class ParallelJsonlDataset(Dataset):
         # "<src_lang> <tgt_lang> <text>" — see tokenization_indictrans.py
         # _src_tokenize. The target side is plain text in target mode.
         src_with_tags = f"{self.src_lang} {self.tgt_lang} {ex['src']}"
+        # IMPORTANT: do NOT pad here. We let DataCollatorForSeq2Seq pad
+        # dynamically per-batch — that codepath converts label pad tokens to
+        # -100 so they are ignored by cross-entropy. If we pre-pad here, the
+        # collator no longer touches the labels and the model gets trained to
+        # predict pad_token_id at every padding position (catastrophic).
         encoded = self.tokenizer(
             src_with_tags,
             text_target=ex["tgt"],
             max_length=self.max_len,
             truncation=True,
-            padding="max_length",
-            return_tensors="pt",
+            return_tensors=None,  # plain Python lists for the collator
         )
         return {
-            "input_ids":      encoded["input_ids"].squeeze(0),
-            "attention_mask": encoded["attention_mask"].squeeze(0),
-            "labels":         encoded["labels"].squeeze(0),
+            "input_ids":      encoded["input_ids"],
+            "attention_mask": encoded["attention_mask"],
+            "labels":         encoded["labels"],
         }
 
 
@@ -195,7 +202,7 @@ def train(lang: str, epochs: int, lr: float, lora_rank: int):
         logging_steps=10,
         save_steps=200,
         save_total_limit=2,
-        eval_strategy="steps" if eval_set else "no",
+        evaluation_strategy="steps" if eval_set else "no",
         eval_steps=200 if eval_set else None,
         predict_with_generate=False,  # generation balloons RAM — eval on loss
         fp16=False,

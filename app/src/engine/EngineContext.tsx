@@ -93,10 +93,12 @@ function pathsForDirection(direction: ModelDirection): ModelPaths {
 export function EngineProvider({ children }: ProviderProps) {
   const [status, setStatus] = useState<EngineStatus>('initializing');
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
-  const [packStates, setPackStates] = useState<Record<PackDirection, PackState>>({
-    'en-indic':    { id: 'en-indic',    status: 'idle', progressFraction: 0 },
-    'indic-en':    { id: 'indic-en',    status: 'idle', progressFraction: 0 },
-    'indic-indic': { id: 'indic-indic', status: 'idle', progressFraction: 0 },
+  const [packStates, setPackStates] = useState<Record<PackDirection, PackState>>(() => {
+    const initial = {} as Record<PackDirection, PackState>;
+    for (const pack of LANGUAGE_PACKS) {
+      initial[pack.id] = { id: pack.id, status: 'idle', progressFraction: 0 };
+    }
+    return initial;
   });
 
   const initEngine = useCallback(async () => {

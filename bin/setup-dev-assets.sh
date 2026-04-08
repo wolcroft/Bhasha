@@ -16,7 +16,7 @@ set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSETS="$ROOT/app/assets/models"
 
-DIRECTIONS=(en-indic indic-en indic-indic)
+DIRECTIONS=(en-indic indic-en indic-indic en-lus_Latn en-kha_Latn)
 ONNX_FILES=(encoder_model_int8.onnx decoder_model_int8.onnx tokenizer.onnx detokenizer.onnx)
 
 for dir in "${DIRECTIONS[@]}"; do

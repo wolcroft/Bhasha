@@ -21,7 +21,12 @@ import type { InferenceSession, Tensor } from 'onnxruntime-react-native';
 import { IndicProcessor } from './IndicProcessor';
 import { OnnxTokenizer, type TokenizerMeta } from './tokenizer';
 
-export type ModelDirection = 'en-indic' | 'indic-en' | 'indic-indic';
+export type ModelDirection =
+  | 'en-indic'
+  | 'indic-en'
+  | 'indic-indic'
+  | 'en-lus_Latn'
+  | 'en-kha_Latn';
 
 export interface TranslatorOptions {
   maxLength?: number;     // Max tokens to generate (default 256)

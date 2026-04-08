@@ -27,7 +27,7 @@ export interface BundledModelAssets {
   tokensMeta: TokenizerMeta;
 }
 
-export const BUNDLED_MODELS: Record<'en-indic' | 'indic-en' | 'indic-indic', BundledModelAssets> = {
+export const BUNDLED_MODELS: Record<'en-indic' | 'indic-en' | 'indic-indic' | 'en-lus_Latn' | 'en-kha_Latn', BundledModelAssets> = {
   'en-indic': {
     encoder:     require('../../assets/models/en-indic/encoder_model_int8.onnx'),
     decoder:     require('../../assets/models/en-indic/decoder_model_int8.onnx'),
@@ -48,6 +48,21 @@ export const BUNDLED_MODELS: Record<'en-indic' | 'indic-en' | 'indic-indic', Bun
     tokenizer:   require('../../assets/models/indic-indic/tokenizer.onnx'),
     detokenizer: require('../../assets/models/indic-indic/detokenizer.onnx'),
     tokensMeta:  require('../../assets/models/indic-indic/tokens.json') as TokenizerMeta,
+  },
+  // LoRA-fine-tuned directions — Nagamese (lus_Latn slot) + Khasi (kha_Latn)
+  'en-lus_Latn': {
+    encoder:     require('../../assets/models/en-lus_Latn/encoder_model_int8.onnx'),
+    decoder:     require('../../assets/models/en-lus_Latn/decoder_model_int8.onnx'),
+    tokenizer:   require('../../assets/models/en-lus_Latn/tokenizer.onnx'),
+    detokenizer: require('../../assets/models/en-lus_Latn/detokenizer.onnx'),
+    tokensMeta:  require('../../assets/models/en-lus_Latn/tokens.json') as TokenizerMeta,
+  },
+  'en-kha_Latn': {
+    encoder:     require('../../assets/models/en-kha_Latn/encoder_model_int8.onnx'),
+    decoder:     require('../../assets/models/en-kha_Latn/decoder_model_int8.onnx'),
+    tokenizer:   require('../../assets/models/en-kha_Latn/tokenizer.onnx'),
+    detokenizer: require('../../assets/models/en-kha_Latn/detokenizer.onnx'),
+    tokensMeta:  require('../../assets/models/en-kha_Latn/tokens.json') as TokenizerMeta,
   },
 };
 

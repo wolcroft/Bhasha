@@ -9,7 +9,12 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 
-export type PackDirection = 'en-indic' | 'indic-en' | 'indic-indic';
+export type PackDirection =
+  | 'en-indic'
+  | 'indic-en'
+  | 'indic-indic'
+  | 'en-lus_Latn'   // Nagamese (LoRA, lus_Latn slot)
+  | 'en-kha_Latn';  // Khasi (LoRA, kha_Latn slot)
 
 export interface LanguagePack {
   id: PackDirection;
@@ -51,6 +56,24 @@ export const LANGUAGE_PACKS: LanguagePack[] = [
       'Translate directly between any two Northeast languages (e.g. Assamese → Manipuri) without going through English.',
     languageCodes: ['*indic'],
     installedSizeBytes: 380 * 1024 * 1024,
+    version: '1.0.0',
+  },
+  {
+    id: 'en-lus_Latn',
+    name: 'English → Nagamese',
+    description:
+      'Translate from English into Nagamese (the lingua franca of Nagaland). LoRA fine-tuned on 7,500 parallel pairs. Bundled with the app.',
+    languageCodes: ['eng_Latn'],
+    installedSizeBytes: 210 * 1024 * 1024,
+    version: '1.0.0',
+  },
+  {
+    id: 'en-kha_Latn',
+    name: 'English → Khasi',
+    description:
+      'Translate from English into Khasi (principal language of Meghalaya). LoRA fine-tuned on 27,000 parallel pairs.',
+    languageCodes: ['eng_Latn'],
+    installedSizeBytes: 210 * 1024 * 1024,
     version: '1.0.0',
   },
 ];

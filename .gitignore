@@ -1,9 +1,20 @@
 # Model export
 model-export/bhasha-models/
 model-export/models/
+model-export/models-merged/
 model-export/onnx/
 model-export/onnx-quantized/
 model-export/venv/
+model-export/raw/
+model-export/data/
+# Keep lora-adapters final weights but skip in-progress checkpoints and
+# tokenizer duplicates (dict.*.json, model.SRC/TGT are copies of en-indic base).
+model-export/lora-adapters/**/checkpoint-*/
+model-export/lora-adapters/**/dict.*.json
+model-export/lora-adapters/**/model.SRC
+model-export/lora-adapters/**/model.TGT
+model-export/lora-adapters/**/tokenization_indictrans.py
+model-export/lora-adapters/**/README.md
 __pycache__/
 *.pyc
 

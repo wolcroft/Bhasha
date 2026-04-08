@@ -65,6 +65,8 @@ from typing import Iterable
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 
+# lus_Latn = Nagamese (reusing Mizo's dict slot — see finetune_lora.py comment)
+# kha_Latn = Khasi
 SUPPORTED_LANGS = ("lus_Latn", "kha_Latn")
 
 # Filtering thresholds — chosen to drop obvious misalignments without
