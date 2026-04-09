@@ -26,6 +26,7 @@ import {
   getDetokenizerPath,
 } from './LanguagePack';
 import { BUNDLED_MODELS } from './bundledAssets';
+import { BUNDLED_TTS_VOICES } from './bundledTTS';
 import { setModelVersion, updateSettings, getSettings } from './storage';
 
 export type DownloadStatus = 'idle' | 'downloading' | 'extracting' | 'installed' | 'error';
@@ -182,6 +183,52 @@ export async function installAllBundledPacks(): Promise<void> {
   for (const pack of LANGUAGE_PACKS) {
     if (await isPackInstalled(pack.id)) continue;
     await downloadPack(pack);
+  }
+}
+
+// ─── Bundled TTS installer ────────────────────────────────────────────────────
+
+function getTTSVoiceDir(langCode: string): string {
+  return `${FileSystem.documentDirectory}tts/${langCode}`;
+}
+
+async function isTTSInstalled(langCode: string): Promise<boolean> {
+  const dir = getTTSVoiceDir(langCode);
+  const [model, config] = await Promise.all([
+    FileSystem.getInfoAsync(`${dir}/model.onnx`),
+    FileSystem.getInfoAsync(`${dir}/model.onnx.json`),
+  ]);
+  return model.exists && config.exists;
+}
+
+/**
+ * Copy bundled Piper TTS voice packs to the writable document directory
+ * on first launch. No network is used — assets are copied from the bundle.
+ *
+ * Installed voices: eng_Latn (60 MB, en_US-amy-low) and
+ *                   npi_Deva (26 MB, ne_NP-google-x_low).
+ */
+export async function installAllBundledTTS(): Promise<void> {
+  for (const [langCode, voice] of Object.entries(BUNDLED_TTS_VOICES)) {
+    if (await isTTSInstalled(langCode)) continue;
+
+    const destDir = getTTSVoiceDir(langCode);
+    await FileSystem.makeDirectoryAsync(destDir, { intermediates: true });
+
+    // Copy ONNX model via expo-asset
+    const modelAsset = Asset.fromModule(voice.modelAsset);
+    await modelAsset.downloadAsync();
+    if (modelAsset.localUri) {
+      await FileSystem.deleteAsync(`${destDir}/model.onnx`, { idempotent: true });
+      await FileSystem.copyAsync({ from: modelAsset.localUri, to: `${destDir}/model.onnx` });
+    }
+
+    // Write inlined JSON config to disk
+    await FileSystem.writeAsStringAsync(
+      `${destDir}/model.onnx.json`,
+      JSON.stringify(voice.config),
+      { encoding: FileSystem.EncodingType.UTF8 },
+    );
   }
 }
 

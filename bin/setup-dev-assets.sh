@@ -37,6 +37,30 @@ for dir in "${DIRECTIONS[@]}"; do
   fi
 done
 
+# ─── TTS voice packs ─────────────────────────────────────────────────────────
+# Piper VITS models for English and Nepali. 60 MB + 26 MB, gitignored.
+# JSON configs are inlined in src/models/bundledTTS.ts so only the ONNX
+# files need to be present on disk.
+
+TTS="$ROOT/app/assets/tts"
+declare -A TTS_URLS=(
+  ["eng_Latn/model.onnx"]="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/low/en_US-amy-low.onnx"
+  ["npi_Deva/model.onnx"]="https://huggingface.co/rhasspy/piper-voices/resolve/main/ne/ne_NP/google/x_low/ne_NP-google-x_low.onnx"
+)
+
+for rel in "${!TTS_URLS[@]}"; do
+  target="$TTS/$rel"
+  mkdir -p "$(dirname "$target")"
+  if [[ ! -s "$target" ]]; then
+    url="${TTS_URLS[$rel]}"
+    echo "  downloading tts/$rel …"
+    curl -fsSL "$url" -o "$target"
+    echo "  done  tts/$rel ($(du -sh "$target" | cut -f1))"
+  else
+    echo "  exists tts/$rel"
+  fi
+done
+
 echo ""
-echo "✅  Stub assets created. Now run the real pipeline:"
+echo "✅  All assets ready. Now run the real model pipeline if needed:"
 echo "    cd model-export && ./run_pipeline.sh"

@@ -25,6 +25,11 @@ __pycache__/
 app/assets/models/**/*.onnx
 app/assets/models/**/*.onnx.data
 
+# Bundled TTS voice packs are downloaded by bin/setup-dev-assets.sh.
+# 60 MB (English) + 26 MB (Nepali), exceed GitHub's 100 MB limit.
+# To populate locally: bash bin/setup-dev-assets.sh
+app/assets/tts/**/*.onnx
+
 # React Native / Expo
 app/node_modules/
 app/.expo/

@@ -20,41 +20,35 @@ export interface TTSOptions {
 }
 
 export interface VoicePack {
-  langCode: string;     // IndicTrans2 lang code, e.g. 'hin_Deva'
+  langCode: string;     // IndicTrans2 lang code, e.g. 'eng_Latn'
   name: string;
   engine: 'piper' | 'kokoro';
-  downloadUrl: string;
+  /** true = bundled with the app; false = CDN download (not yet supported) */
+  bundled: boolean;
   sizeBytes: number;
 }
 
+/**
+ * Voice packs available in v1.0.
+ *
+ * Only languages with a Piper VITS model are listed. Bengali, Assamese,
+ * Manipuri, Santali, Nagamese and Khasi have no upstream Piper voice pack
+ * and are intentionally omitted — the speak button no-ops for those languages.
+ */
 export const VOICE_PACKS: VoicePack[] = [
   {
-    langCode: 'hin_Deva',
-    name: 'Hindi (Piper VITS)',
-    engine: 'piper',
-    downloadUrl: 'https://cdn.bhasha.app/tts/v1/piper-hi-x-low.tar.gz',
-    sizeBytes: 15 * 1024 * 1024,
-  },
-  {
     langCode: 'eng_Latn',
-    name: 'English (Kokoro)',
-    engine: 'kokoro',
-    downloadUrl: 'https://cdn.bhasha.app/tts/v1/kokoro-en.tar.gz',
-    sizeBytes: 82 * 1024 * 1024,
+    name: 'English (en_US-amy-low)',
+    engine: 'piper',
+    bundled: true,
+    sizeBytes: 63 * 1024 * 1024,
   },
   {
-    langCode: 'ben_Beng',
-    name: 'Bengali (Piper VITS)',
+    langCode: 'npi_Deva',
+    name: 'Nepali (ne_NP-google-x_low)',
     engine: 'piper',
-    downloadUrl: 'https://cdn.bhasha.app/tts/v1/piper-bn-x-low.tar.gz',
-    sizeBytes: 16 * 1024 * 1024,
-  },
-  {
-    langCode: 'tam_Taml',
-    name: 'Tamil (Piper VITS)',
-    engine: 'piper',
-    downloadUrl: 'https://cdn.bhasha.app/tts/v1/piper-ta-x-low.tar.gz',
-    sizeBytes: 16 * 1024 * 1024,
+    bundled: true,
+    sizeBytes: 27 * 1024 * 1024,
   },
 ];
 
