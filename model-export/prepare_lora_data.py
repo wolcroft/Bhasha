@@ -8,19 +8,24 @@ expects:
 
 Each line is `{"src": "<English>", "tgt": "<target language>"}`.
 
-Why a separate prep step? The realistic data sources for Mizo (lus_Latn) and
-Khasi (kha_Latn) ship in widely different shapes — TSV from OPUS, parallel
+Why a separate prep step? The realistic data sources for Nagamese (lus_Latn)
+and Khasi (kha_Latn) ship in widely different shapes — TSV from OPUS, parallel
 text files from bible corpora, JSON dumps from community projects — so the
 pipeline does the conversion once, up front, and the trainer never has to
 care.
 
+Note: `lus_Latn` is the FLORES-200 slot originally intended for Mizo (Lushai).
+We repurpose it for Nagamese because Mizo's slot is the only available
+Latin-script vacancy in IndicTrans2's en-indic vocab (id 32162). Mizo is
+therefore in Tier 3 until a dedicated slot becomes available.
+
 Realistic data sources (as of 2026):
 
-  Mizo (lus_Latn)
-    - christos-c/bible-corpus on HuggingFace (~30k verses, English↔Mizo)
-    - OPUS Tatoeba (small but high quality)
-    - JW300 corpus (legally restricted; check terms before use)
-    - Mizo Bible from biblegateway/bible.com (manual scrape, verse-aligned)
+  Nagamese (lus_Latn)
+    - Community-collected Nagamese↔English sentence pairs (~7,500 pairs)
+    - OPUS corpora filtered for Nagaland/Nagamese context
+    - Note: christos-c/bible-corpus has Mizo but NOT Nagamese — do not use
+      it for this slot; bible Mizo text would train the wrong language.
 
   Khasi (kha_Latn)
     - christos-c/bible-corpus on HuggingFace (~30k verses, English↔Khasi)
@@ -28,14 +33,14 @@ Realistic data sources (as of 2026):
     - Wikipedia dumps (very small, mostly stubs)
 
   Confirmed-empty sources (do NOT bother):
-    - AI4Bharat BPCC: no Mizo, no Khasi (only the 22 scheduled languages)
+    - AI4Bharat BPCC: no Nagamese, no Khasi (only the 22 scheduled languages)
     - WMT24 LR-Indic: same scheduled-language scope
-    - FLORES-200: includes Mizo as a dev/test set but the data is too
-      small to fine-tune on (only ~2k sentences total)
+    - FLORES-200: includes Mizo (not Nagamese) as a dev/test set; too small
+      to fine-tune on (~2k sentences) and wrong language for this slot
 
 Usage:
     # From a TSV file (one pair per line: english<TAB>target):
-    python prepare_lora_data.py --lang lus_Latn --tsv ./raw/mizo_bible.tsv
+    python prepare_lora_data.py --lang lus_Latn --tsv ./raw/nagamese_pairs.tsv
 
     # From two parallel plain-text files (line N must align):
     python prepare_lora_data.py --lang kha_Latn \\
@@ -44,7 +49,7 @@ Usage:
 
     # From a JSONL file with arbitrary key names:
     python prepare_lora_data.py --lang lus_Latn \\
-        --jsonl ./raw/mizo.jsonl --src-key english --tgt-key mizo
+        --jsonl ./raw/nagamese.jsonl --src-key english --tgt-key nagamese
 
 The script always:
   - Strips trailing whitespace and skips empty/blank pairs

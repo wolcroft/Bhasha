@@ -2,10 +2,10 @@
 Bhasha — LoRA fine-tuning for Tier-2 Northeast languages
 =========================================================
 IndicTrans2's distilled-200M base model does not natively support
-Mizo (lus_Latn) or Khasi (kha_Latn). This script fine-tunes a small
-LoRA adapter on top of the en-indic checkpoint using parallel
-English↔target sentence pairs. (Garo was dropped from v1 — no usable
-parallel corpus exists.)
+Nagamese (using the lus_Latn slot, id 32162) or Khasi (kha_Latn, id 32163).
+This script fine-tunes a small LoRA adapter on top of the en-indic checkpoint
+using parallel English↔target sentence pairs. (Garo was dropped from v1 —
+no usable parallel corpus exists.)
 
 Why LoRA?
   • Trainable params drop from 200M to ~2-5M (rank 16, attention only)

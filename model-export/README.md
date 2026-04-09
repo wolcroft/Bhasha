@@ -119,13 +119,20 @@ the `EncoderWrapper`/`DecoderWrapper` attribute paths accordingly.
 **OOM during export** — 200M model needs ~4-6GB RAM. Close other apps or try
 `--device cpu` with swap space available.
 
-## Tier-2 LoRA pipeline (Mizo + Khasi)
+## Tier-2 LoRA pipeline (Nagamese + Khasi)
 
-Mizo (`lus_Latn`) and Khasi (`kha_Latn`) are not supported by the IndicTrans2
-distilled base model out of the box, but their language-tag embeddings *do*
-exist in the en-indic vocab (ids 32162 and 32163). LoRA fine-tuning on a
-small parallel corpus is enough to make them usable. Garo (`grt_Latn`) is
-not in the dict at all and was dropped from v1.
+Nagamese (`lus_Latn` slot) and Khasi (`kha_Latn`) are not supported by the
+IndicTrans2 distilled base model out of the box, but their language-tag
+embeddings *do* exist in the en-indic vocab (ids 32162 and 32163). LoRA
+fine-tuning on a small parallel corpus is enough to make them usable. Garo
+(`grt_Latn`) is not in the dict at all and was dropped from v1.
+
+**Note on `lus_Latn`:** In FLORES-200 this slot was originally reserved for
+Mizo (Lushai). We repurpose it for Nagamese — the Assamese-based creole
+lingua franca of Nagaland (~2M speakers) — because Nagamese has higher reach
+and Mizo's FLORES vocabulary slot is the only available Latin-script vacancy.
+Mizo is therefore listed as Tier-3 ("coming soon") in the app until
+IndicTrans2 adds a dedicated slot or a second Latin-script vacancy is found.
 
 ### Step A — Get parallel data
 
@@ -133,13 +140,12 @@ Realistic sources (do your own license check before bundling derivatives):
 
 | Language | Source | Approx size |
 |---|---|---|
-| Mizo | `christos-c/bible-corpus` on HuggingFace | ~30k verses |
-| Mizo | OPUS Tatoeba | small but high quality |
-| Mizo | FLORES-200 dev/test | ~2k sentences (eval only) |
+| Nagamese | Community-collected Nagamese↔English sentence pairs | ~7,500 pairs |
+| Nagamese | OPUS corpora filtered for Nagaland/Nagamese | small supplement |
 | Khasi | `christos-c/bible-corpus` on HuggingFace | ~30k verses |
 | Khasi | Khasi Hills Bible Society | manual scrape, verse-aligned |
 
-Confirmed-empty (skip these — no Mizo/Khasi coverage):
+Confirmed-empty (skip these — no Nagamese/Khasi coverage):
 - AI4Bharat BPCC
 - WMT24 LR-Indic
 
@@ -150,8 +156,8 @@ and produces `data/<lang>/{train,dev}.jsonl`. It filters out misaligned
 pairs by length ratio and dedupes.
 
 ```bash
-# Bible corpus from HuggingFace, downloaded to a TSV first:
-python prepare_lora_data.py --lang lus_Latn --tsv ./raw/mizo_bible.tsv
+# TSV of English↔Nagamese pairs:
+python prepare_lora_data.py --lang lus_Latn --tsv ./raw/nagamese_pairs.tsv
 
 # Or two paired plain-text files:
 python prepare_lora_data.py --lang kha_Latn \
