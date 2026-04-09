@@ -35,8 +35,14 @@ app/node_modules/
 app/.expo/
 app/dist/
 app/web-build/
-app/ios/
 app/android/
+
+# ios/ is tracked (bare workflow — native patches applied via Podfile + project.pbxproj)
+# Exclude generated/downloaded artifacts only:
+app/ios/Pods/
+app/ios/build/
+app/ios/.xcode.env.local
+app/ios/DerivedData/
 app/*.jks
 app/*.p12
 app/*.key

@@ -1,0 +1,29 @@
+diff --git a/node_modules/expo-file-system/ios/FileSystemModule.swift b/node_modules/expo-file-system/ios/FileSystemModule.swift
+index d69a9f1..67894c1 100644
+--- a/node_modules/expo-file-system/ios/FileSystemModule.swift
++++ b/node_modules/expo-file-system/ios/FileSystemModule.swift
+@@ -147,7 +147,7 @@ public final class FileSystemModule: Module {
+         return output
+       }
+ 
+-      if fileSystemManager.getPathPermissions(url.path).contains(.read) {
++      if (fileSystemManager as? EXFilePermissionModuleInterface)?.getPathPermissions(url.path).contains(.read) == true {
+         var isDirectory: ObjCBool = false
+         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+           output.exists = true
+diff --git a/node_modules/expo-file-system/ios/Legacy/FileSystemHelpers.swift b/node_modules/expo-file-system/ios/Legacy/FileSystemHelpers.swift
+index 3e3d2b4..e3102b3 100644
+--- a/node_modules/expo-file-system/ios/Legacy/FileSystemHelpers.swift
++++ b/node_modules/expo-file-system/ios/Legacy/FileSystemHelpers.swift
+@@ -63,7 +63,10 @@ internal func ensurePathPermission(_ appContext: AppContext?, path: String, flag
+   guard let fileSystemManager = appContext?.fileSystem else {
+     throw Exceptions.PermissionsModuleNotFound()
+   }
+-  guard fileSystemManager.getPathPermissions(path).contains(flag) else {
++  // Cast to EXFilePermissionModuleInterface — getPathPermissions is defined there,
++  // not on EXFileSystemInterface. Required for Xcode 26 / Swift strict protocol typing.
++  let permissionManager = fileSystemManager as? EXFilePermissionModuleInterface
++  guard permissionManager?.getPathPermissions(path).contains(flag) == true else {
+     throw flag == .read ? FileNotReadableException(path) : FileNotWritableException(path)
+   }
+ }

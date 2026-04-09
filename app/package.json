@@ -7,7 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "patch-package"
   },
   "jest": {
     "preset": "ts-jest",
@@ -57,6 +58,7 @@
     "babel-preset-expo": "^55.0.16",
     "jest": "^30.3.0",
     "jest-expo": "^55.0.14",
+    "patch-package": "^8.0.1",
     "ts-jest": "^29.4.9",
     "typescript": "~5.9.2"
   },
