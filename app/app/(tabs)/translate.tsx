@@ -23,10 +23,11 @@ import { getLanguage, LANGUAGES, type Language } from '@/utils/languages';
 import { detectLanguage } from '@/engine/langDetect/FastTextDetect';
 import { addToHistory } from '@/models/storage';
 import { useEngine } from '@/engine/EngineContext';
+import { getSherpaTTS } from '@/engine/tts/SherpaTTS';
 
 // Default languages
 const DEFAULT_SRC = LANGUAGES.find((l) => l.code === 'eng_Latn')!;
-const DEFAULT_TGT = LANGUAGES.find((l) => l.code === 'hin_Deva')!;
+const DEFAULT_TGT = LANGUAGES.find((l) => l.code === 'asm_Beng')!;
 
 type TranslationState = 'idle' | 'loading' | 'done' | 'error';
 
@@ -112,6 +113,12 @@ export default function TranslateScreen() {
     Alert.alert('Copied', 'Translation copied to clipboard.');
   }, [translatedText]);
 
+  const handleSpeak = useCallback(async () => {
+    if (!translatedText) return;
+    const tts = getSherpaTTS(tgtLang.code);
+    await tts.speak(translatedText);
+  }, [translatedText, tgtLang]);
+
   const handleClear = useCallback(() => {
     setSourceText('');
     setTranslatedText('');
@@ -192,7 +199,7 @@ export default function TranslateScreen() {
           text={translatedText}
           isLoading={translationState === 'loading'}
           onCopy={translatedText ? handleCopy : undefined}
-          onSpeak={translatedText ? () => {} : undefined}
+          onSpeak={translatedText ? handleSpeak : undefined}
         />
       </ScrollView>
     </View>

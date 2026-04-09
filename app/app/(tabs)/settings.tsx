@@ -106,7 +106,7 @@ export default function SettingsScreen() {
             {pack.description}
           </Text>
           <Text style={[Typography.caption, { color: colors.textMuted, marginTop: 4 }]}>
-            {formatBytes(pack.downloadSizeBytes)} · v{pack.version}
+            {formatBytes(pack.installedSizeBytes)} · v{pack.version}
           </Text>
         </View>
 

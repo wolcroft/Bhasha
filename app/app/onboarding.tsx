@@ -23,7 +23,7 @@ const SLIDES = [
   {
     icon: '🌍',
     title: 'Welcome to Bhasha',
-    subtitle: 'Real-time translation across all 22 Indian languages, plus Mizo and Khasi. Fully offline after first setup.',
+    subtitle: 'Offline translation for the languages of Northeast India — Assamese, Bengali, Bodo, Manipuri, Nepali, Santali, Nagamese, Khasi and more. No internet needed.',
   },
   {
     icon: '🔒',
@@ -80,7 +80,7 @@ export default function OnboardingScreen() {
 
   const totalSize = [...selectedPacks].reduce((sum, id) => {
     const pack = LANGUAGE_PACKS.find((p) => p.id === id);
-    return sum + (pack?.downloadSizeBytes ?? 0);
+    return sum + (pack?.installedSizeBytes ?? 0);
   }, 0);
 
   return (
@@ -146,7 +146,7 @@ export default function OnboardingScreen() {
                       {pack.description}
                     </Text>
                     <Text style={[Typography.caption, { color: colors.textMuted, marginTop: 4 }]}>
-                      {formatBytes(pack.downloadSizeBytes)}
+                      {formatBytes(pack.installedSizeBytes)}
                     </Text>
                   </View>
                   <View
