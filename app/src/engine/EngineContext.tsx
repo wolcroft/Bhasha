@@ -35,7 +35,6 @@ import {
 import {
   initModelManager,
   installAllBundledPacks,
-  installAllBundledTTS,
   subscribeToPackState,
   type PackState,
 } from '@/models/ModelManager';
@@ -108,10 +107,6 @@ export function EngineProvider({ children }: ProviderProps) {
     try {
       await initModelManager();
       await installAllBundledPacks();
-      // TTS voice packs are installed in parallel — not on the critical path.
-      installAllBundledTTS().catch((err) =>
-        console.warn('[Engine] TTS install failed:', err),
-      );
       // Sessions load lazily on the first translate() call to keep first paint fast.
       setStatus('ready');
     } catch (err: any) {

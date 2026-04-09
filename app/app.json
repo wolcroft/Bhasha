@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bhasha.app",
+      "deploymentTarget": "16.0",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Bhasha uses the microphone for voice translation.",
         "NSCameraUsageDescription": "Bhasha uses the camera to translate text in photos.",

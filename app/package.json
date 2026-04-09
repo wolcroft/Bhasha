@@ -4,8 +4,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest"
   },
@@ -32,6 +32,7 @@
     "expo-image-picker": "^55.0.17",
     "expo-linking": "^55.0.11",
     "expo-router": "^55.0.11",
+    "expo-speech": "^55.0.12",
     "expo-splash-screen": "^55.0.16",
     "expo-status-bar": "~3.0.9",
     "onnxruntime-react-native": "^1.24.3",
@@ -44,8 +45,8 @@
     "react-native-reanimated": "^4.3.0",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.24.0",
-    "react-native-sherpa-onnx-offline-tts": "^0.2.6",
     "react-native-svg": "^15.15.4",
+    "react-native-worklets": "^0.8.1",
     "react-native-zip-archive": "^7.0.2"
   },
   "devDependencies": {

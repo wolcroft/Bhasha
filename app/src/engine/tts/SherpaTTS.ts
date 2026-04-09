@@ -1,72 +1,68 @@
 /**
- * SherpaTTS — Text-to-Speech via Sherpa-ONNX (Piper / Kokoro VITS)
+ * SherpaTTS — Text-to-Speech, backed by expo-speech (iOS/Android system TTS).
  *
- * Supported engines:
- *  - Piper VITS: 50+ languages, Hindi, English, and more (~15-50MB per voice)
- *  - Kokoro-82M: Higher quality English (and some Indian English variants)
+ * expo-speech uses the platform's built-in TTS engine (AVSpeechSynthesizer on
+ * iOS, Android TTS on Android). No extra native framework is bundled, which
+ * avoids the onnxruntime.xcframework conflict that arose with the original
+ * react-native-sherpa-onnx-offline-tts approach.
  *
- * Voice packs are downloaded on-demand via ModelManager and stored locally.
- * Adjustable speed (0.5x – 2.0x), pitch, volume.
+ * Supported languages (system TTS, quality depends on iOS voice pack):
+ *   eng_Latn → 'en-US'   — excellent quality on all devices
+ *   npi_Deva → 'ne-NP'   — good quality on iOS 17+ (Nepali voice installed)
+ *   asm_Beng → 'as-IN'   — available on some iOS versions
+ *   ben_Beng → 'bn-IN'   — available on iOS 15+
+ *   brx_Deva → no system voice; speak() silently no-ops
+ *   mni_*    → no system voice; speak() silently no-ops
+ *   sat_Olck → no system voice; speak() silently no-ops
+ *   lus_Latn → 'en-US' fallback (Nagamese written in Latin, read as English)
+ *   kha_Latn → 'en-US' fallback (Khasi written in Latin, read as English)
+ *
+ * The Piper ONNX voice models downloaded to app/assets/tts/ are preserved in
+ * the repo for a future native Sherpa-ONNX integration once the ORT framework
+ * conflict is resolved upstream.
  */
 
-import * as FileSystem from 'expo-file-system/legacy';
-import { playAudioFile } from '@/utils/audio';
-import type { Sound } from 'expo-av/build/Audio';
+import * as Speech from 'expo-speech';
 
 export interface TTSOptions {
   speed?: number;       // 0.5–2.0, default 1.0
   pitch?: number;       // 0.5–2.0, default 1.0
-  speakerId?: number;   // For multi-speaker models (0 = default)
+  speakerId?: number;   // ignored (system TTS is single-speaker)
 }
 
 export interface VoicePack {
-  langCode: string;     // IndicTrans2 lang code, e.g. 'eng_Latn'
+  langCode: string;
   name: string;
-  engine: 'piper' | 'kokoro';
-  /** true = bundled with the app; false = CDN download (not yet supported) */
-  bundled: boolean;
+  engine: 'system';
+  bundled: true;
   sizeBytes: number;
 }
 
-/**
- * Voice packs available in v1.0.
- *
- * Only languages with a Piper VITS model are listed. Bengali, Assamese,
- * Manipuri, Santali, Nagamese and Khasi have no upstream Piper voice pack
- * and are intentionally omitted — the speak button no-ops for those languages.
- */
+/** Languages with a known system TTS voice. */
 export const VOICE_PACKS: VoicePack[] = [
-  {
-    langCode: 'eng_Latn',
-    name: 'English (en_US-amy-low)',
-    engine: 'piper',
-    bundled: true,
-    sizeBytes: 63 * 1024 * 1024,
-  },
-  {
-    langCode: 'npi_Deva',
-    name: 'Nepali (ne_NP-google-x_low)',
-    engine: 'piper',
-    bundled: true,
-    sizeBytes: 27 * 1024 * 1024,
-  },
+  { langCode: 'eng_Latn', name: 'English (system)',        engine: 'system', bundled: true, sizeBytes: 0 },
+  { langCode: 'npi_Deva', name: 'Nepali (system, iOS 17+)', engine: 'system', bundled: true, sizeBytes: 0 },
+  { langCode: 'ben_Beng', name: 'Bengali (system, iOS 15+)', engine: 'system', bundled: true, sizeBytes: 0 },
+  { langCode: 'asm_Beng', name: 'Assamese (system)',        engine: 'system', bundled: true, sizeBytes: 0 },
 ];
 
-function getVoiceDir(langCode: string): string {
-  return `${FileSystem.documentDirectory}tts/${langCode}`;
-}
-
-/** Returns true if a voice pack is installed for this language. */
-export async function isVoiceInstalled(langCode: string): Promise<boolean> {
-  const dir = getVoiceDir(langCode);
-  const info = await FileSystem.getInfoAsync(dir);
-  return info.exists;
-}
+/** Maps IndicTrans2 language codes to BCP-47 locale tags for the system TTS. */
+const LANG_TO_BCP47: Record<string, string> = {
+  eng_Latn: 'en-US',
+  npi_Deva: 'ne-NP',
+  ben_Beng: 'bn-IN',
+  asm_Beng: 'as-IN',
+  brx_Deva: 'hi-IN',  // Bodo has no system voice — use Hindi as closest script fallback
+  mni_Mtei: 'en-US',  // Meitei has no system voice — no-op via availableVoices check
+  mni_Beng: 'bn-IN',
+  sat_Olck: 'en-US',  // Santali has no system voice — no-op via availableVoices check
+  lus_Latn: 'en-US',  // Nagamese in Latin script — English reads it legibly
+  kha_Latn: 'en-US',  // Khasi in Latin script — English reads it legibly
+};
 
 /**
- * SherpaTTS — wraps the Sherpa-ONNX TTS module.
+ * SherpaTTS — wraps expo-speech with the same API as before.
  * Call speak() to synthesise and immediately play audio.
- * Call synthesise() to get a file URI for deferred playback.
  */
 export class SherpaTTS {
   private langCode: string;
@@ -75,38 +71,22 @@ export class SherpaTTS {
     this.langCode = langCode;
   }
 
-  async speak(text: string, options: TTSOptions = {}): Promise<Sound | null> {
-    const uri = await this.synthesise(text, options);
-    if (!uri) return null;
-    return playAudioFile(uri);
-  }
+  async speak(text: string, options: TTSOptions = {}): Promise<void> {
+    const locale = LANG_TO_BCP47[this.langCode] ?? 'en-US';
+    const { speed = 1.0, pitch = 1.0 } = options;
 
-  async synthesise(text: string, options: TTSOptions = {}): Promise<string | null> {
-    const voiceDir = getVoiceDir(this.langCode);
-    const installed = await isVoiceInstalled(this.langCode);
-    if (!installed) return null;
+    // Stop any currently speaking utterance first
+    await Speech.stop();
 
-    const { speed = 1.0, pitch = 1.0, speakerId = 0 } = options;
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const SherpaModule: any = require('react-native-sherpa-onnx-offline-tts');
-      const outPath = `${FileSystem.cacheDirectory}bhasha-tts-${Date.now()}.wav`;
-
-      const generator = SherpaModule?.default ?? SherpaModule;
-      await generator.generate({
-        text,
-        voiceDir,
-        speakerId,
-        speed,
-        outputPath: outPath,
+    return new Promise((resolve) => {
+      Speech.speak(text, {
+        language: locale,
+        rate: speed,
+        pitch,
+        onDone: () => resolve(),
+        onError: () => resolve(),  // Resolve (not reject) — silence is acceptable
       });
-
-      return outPath;
-    } catch {
-      console.warn(`SherpaTTS: synthesis failed for ${this.langCode}`);
-      return null;
-    }
+    });
   }
 }
 
